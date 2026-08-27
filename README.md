@@ -14,7 +14,7 @@ One repository, two gems.
 | Path | Gem | Contents |
 | --- | --- | --- |
 | [`proto/`](proto/) | `hiero-proto` | Protobuf message classes and gRPC service stubs for the Hiero API. Generated and committed, so installing it never requires `protoc`. |
-| `sdk/` | `hiero-sdk` | The SDK proper: client, execution engine, transactions, queries, keys and value types. *Not yet started.* |
+| [`sdk/`](sdk/) | `hiero-sdk` | The SDK proper: client, execution engine, transactions, queries, keys and value types. *In progress — cryptography primitives only so far.* |
 
 Most applications will depend on `hiero-sdk`. `hiero-proto` is the transport layer, useful
 on its own only for tooling that speaks to a Hiero network directly.
@@ -31,9 +31,21 @@ need that version to use the gem.
 
 ```sh
 bundle install
-bundle exec rspec          # specs
+bundle exec rake spec      # every suite
+bundle exec rake spec:sdk  # just one
 bundle exec rake build     # build the gem into pkg/
 ```
+
+### Cryptography
+
+The SDK implements Ed25519, ECDSA secp256k1 and keccak256 on Ruby's stdlib OpenSSL,
+so it needs no cryptography gem to install. Signatures are byte-identical to the
+other Hiero SDKs, which the specs pin against their shared test vectors.
+
+Installing the optional `digest-keccak` gem makes hashing around 400x faster and is
+picked up automatically; nothing breaks without it. The reasoning, and the
+alternatives that were rejected, are in
+[docs/adr/0001-cryptography-backends.md](docs/adr/0001-cryptography-backends.md).
 
 ### Working on the protobufs
 

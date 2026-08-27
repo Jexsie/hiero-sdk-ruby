@@ -25,7 +25,21 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
-      - run: bundle exec rspec
+      - run: bundle exec rake spec
+
+  # The SDK's cryptography is written to need no native gem. This job removes the
+  # optional one so the pure-Ruby keccak path is what actually gets tested, rather
+  # than being shadowed by a faster implementation that happens to be installed.
+  no-native-crypto:
+    name: crypto works with no optional native gem
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+      - run: gem install zeitwerk rspec --no-document
+      - run: rspec --require spec_helper -Isdk/spec -Isdk/lib --pattern 'sdk/spec/**/*_spec.rb'
 
   protos:
     name: generated output is current
