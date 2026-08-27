@@ -21,7 +21,11 @@ on its own only for tooling that speaks to a Hiero network directly.
 
 ## Requirements
 
-- Ruby >= 4.0
+- Ruby >= 3.2
+
+Supported from 3.2 up to the latest release, and tested against each in CI.
+Development happens on the version in [`.ruby-version`](.ruby-version); you do not
+need that version to use the gem.
 
 ## Development
 

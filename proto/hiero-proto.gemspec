@@ -30,7 +30,11 @@ Gem::Specification.new do |spec|
     "rubygems_mfa_required" => "true"
   }
 
-  spec.required_ruby_version = ">= 4.0"
+  # The floor our dependencies impose anyway: google-protobuf and grpc both
+  # require >= 3.2. It is also where Data.define arrives, which the SDK's value
+  # types are built on. Development happens on the latest Ruby (see .ruby-version);
+  # CI proves the floor still works.
+  spec.required_ruby_version = ">= 3.2"
 
   # The vendored .proto sources ship alongside the generated Ruby: they are small,
   # and they let consumers see exactly which definitions produced these classes.

@@ -15,9 +15,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 4.0 is the supported floor. Nothing ships above it yet, so the matrix
-        # has a single entry; it exists so widening support is a one-line change.
-        ruby: ["4.0"]
+        # Support runs from 3.2 (the floor our dependencies impose, and where
+        # Data.define arrives) up to the latest release. Development happens on
+        # the newest; CI is what proves the floor has not quietly rotted.
+        ruby: ["3.2", "3.3", "3.4", "4.0"]
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
