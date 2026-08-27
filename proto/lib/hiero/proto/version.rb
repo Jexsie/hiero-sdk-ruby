@@ -2,10 +2,12 @@
 
 module Hiero
   module Proto
-    # The gem version tracks the HAPI release these classes were generated from,
-    # so `hiero-proto 0.76.1` unambiguously means "the Hiero API as of v0.76.1".
-    # A regeneration against the same HAPI tag takes a fourth segment: 0.76.1.1.
-    VERSION = "0.76.1"
+    # This gem's own version, independent of the HAPI release it wraps. The two
+    # move at different rates: a HAPI bump does not always warrant a gem release,
+    # and a packaging fix should not have to claim a HAPI version it did not change.
+    # Which HAPI a given gem was built from is recorded below and in the gemspec
+    # metadata rather than encoded in this number.
+    VERSION = "0.1.0"
 
     # The upstream tags the vendored .proto sources were taken from. Kept in sync
     # with proto/HAPI_VERSION and proto/MIRROR_VERSION by bin/generate_protos.

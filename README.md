@@ -13,7 +13,7 @@ One repository, two gems.
 
 | Path | Gem | Contents |
 | --- | --- | --- |
-| [`proto/`](proto/) | `hiero-proto` | Protobuf message classes and gRPC service stubs for the Hiero API. Generated, committed, and versioned to the HAPI release they came from. |
+| [`proto/`](proto/) | `hiero-proto` | Protobuf message classes and gRPC service stubs for the Hiero API. Generated and committed, so installing it never requires `protoc`. |
 | `sdk/` | `hiero-sdk` | The SDK proper: client, execution engine, transactions, queries, keys and value types. *Not yet started.* |
 
 Most applications will depend on `hiero-sdk`. `hiero-proto` is the transport layer, useful
@@ -66,8 +66,8 @@ a different `protoc` produces a different diff.
 ```ruby
 require "hiero/proto"
 
-Hiero::Proto::VERSION        # => "0.76.1"  (the HAPI release these came from)
-Hiero::Proto::HAPI_VERSION   # => "v0.76.1"
+Hiero::Proto::VERSION        # => "0.1.0"    (this gem's version)
+Hiero::Proto::HAPI_VERSION   # => "v0.76.1"  (the HAPI release these came from)
 Hiero::Proto::MIRROR_VERSION # => "v0.161.3"
 
 Proto::CryptoService::Stub                          # consensus node services
