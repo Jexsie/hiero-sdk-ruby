@@ -2,9 +2,20 @@
 
 require "rspec/core/rake_task"
 
-RSpec::Core::RakeTask.new(:spec) do |t|
-  t.pattern = "proto/spec/**/*_spec.rb"
+# One suite per gem. Each needs its own load path and spec_helper, which a single
+# RSpec invocation cannot express, so they run as separate tasks.
+namespace :spec do
+  { proto: "hiero-proto", sdk: "hiero-sdk" }.each do |dir, gem_name|
+    desc "Run the #{gem_name} specs"
+    RSpec::Core::RakeTask.new(dir) do |t|
+      t.pattern = "#{dir}/spec/**/*_spec.rb"
+      t.rspec_opts = "--require spec_helper -I#{dir}/spec -I#{dir}/lib"
+    end
+  end
 end
+
+desc "Run every spec suite"
+task spec: ["spec:proto", "spec:sdk"]
 
 namespace :protos do
   desc "Vendor the .proto sources from the pinned upstream tags"

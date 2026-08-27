@@ -1,5 +1,2 @@
---require spec_helper
---default-path proto/spec
--I proto/spec
 --format documentation
 --color
