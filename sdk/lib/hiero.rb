@@ -3,6 +3,7 @@
 require "zeitwerk"
 
 require_relative "hiero/version"
+require_relative "hiero/errors"
 
 # A Ruby SDK for Hiero.
 module Hiero
@@ -20,7 +21,10 @@ module Hiero
   # the first thing an application calls. Left to autoload lazily, that registry
   # would still be empty.
   @loader = Zeitwerk::Loader.for_gem
+  # Both define several constants each, which is the one thing Zeitwerk's
+  # file-per-constant rule cannot express, so they are required outright above.
   @loader.ignore("#{__dir__}/hiero/version.rb")
+  @loader.ignore("#{__dir__}/hiero/errors.rb")
   @loader.setup
   @loader.eager_load
 end
