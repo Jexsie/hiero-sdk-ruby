@@ -26,7 +26,10 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = ">= 3.2"
 
   spec.files = Dir.chdir(__dir__) do
-    Dir["lib/**/*.rb", "LICENSE", "NOTICE"]
+    # The BIP-39 word list is a data file, not Ruby, and is easy to leave out of
+    # a glob that only looks for .rb -- which would ship a gem that cannot parse
+    # a mnemonic.
+    Dir["lib/**/*.rb", "lib/**/*.txt", "LICENSE", "NOTICE"]
   end
   spec.require_paths = ["lib"]
 

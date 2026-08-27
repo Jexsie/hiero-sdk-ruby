@@ -64,18 +64,25 @@ jobs:
         with:
           ruby-version: "4.0"
           bundler-cache: true
-      - run: bundle exec rake build
+      - run: bundle exec rake build build_sdk
       # Building a gem and installing one are different things: a gem can build
-      # cleanly and still be uninstallable. Install it outside the checkout and
-      # require it with no load path help, the way a consumer would.
-      - name: install and require the built gem
+      # cleanly and still be uninstallable. Install them outside the checkout and
+      # require them with no load path help, the way a consumer would.
+      - name: install and require the built gems
         run: |
-          gem install pkg/hiero-proto.gem --no-document
+          gem install pkg/hiero-proto.gem pkg/hiero-sdk.gem --no-document
           cd "$(mktemp -d)"
           ruby -e '
             require "hiero/proto"
             raise "no CryptoService stub" unless defined?(Proto::CryptoService::Stub)
             raise "no mirror ConsensusService" unless
               Com::Hedera::Mirror::Api::Proto::ConsensusService::Service.rpc_descs.key?(:subscribeTopic)
-            puts "hiero-proto #{Hiero::Proto::VERSION} installs and loads"
+
+            require "hiero"
+            # Exercises the packaged word list, which lives outside lib/**/*.rb and
+            # is the easiest thing to leave out of the gem.
+            key = Hiero::Mnemonic.generate.to_standard_ed25519_private_key
+            raise "signing broken" unless key.public_key.verify(key.sign("x"), "x")
+
+            puts "hiero-proto #{Hiero::Proto::VERSION} and hiero-sdk #{Hiero::VERSION} install and load"
           '

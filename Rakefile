@@ -61,3 +61,15 @@ task :build do
 end
 
 task default: :spec
+
+desc "Build the hiero-sdk gem"
+task :build_sdk do
+  pkg = File.expand_path("pkg", __dir__)
+  mkdir_p pkg
+  %w[LICENSE NOTICE].each { |f| cp f, "sdk/#{f}" }
+  begin
+    Dir.chdir("sdk") { sh "gem build hiero-sdk.gemspec --output #{pkg}/hiero-sdk.gem" }
+  ensure
+    %w[LICENSE NOTICE].each { |f| rm_f "sdk/#{f}" }
+  end
+end
