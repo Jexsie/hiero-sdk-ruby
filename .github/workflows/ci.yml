@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  spec:
+    name: spec (ruby ${{ matrix.ruby }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.2 is the supported floor, set by the SDK's use of Data.define.
+        ruby: ["3.2", "3.3", "3.4", "4.0"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - run: bundle exec rspec
+
+  protos:
+    name: generated output is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+      # Regenerates from the vendored .proto sources and fails if the result
+      # differs from what is committed. This is why grpc-tools is pinned in the
+      # Gemfile: a different protoc produces a different diff.
+      - run: bundle exec rake protos:check
+
+  package:
+    name: gem builds and installs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+      - run: bundle exec rake build
+      # Building a gem and installing one are different things: a gem can build
+      # cleanly and still be uninstallable. Install it outside the checkout and
+      # require it with no load path help, the way a consumer would.
+      - name: install and require the built gem
+        run: |
+          gem install pkg/hiero-proto.gem --no-document
+          cd "$(mktemp -d)"
+          ruby -e '
+            require "hiero/proto"
+            raise "no CryptoService stub" unless defined?(Proto::CryptoService::Stub)
+            raise "no mirror ConsensusService" unless
+              Com::Hedera::Mirror::Api::Proto::ConsensusService::Service.rpc_descs.key?(:subscribeTopic)
+            puts "hiero-proto #{Hiero::Proto::VERSION} installs and loads"
+          '
