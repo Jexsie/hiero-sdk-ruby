@@ -21,7 +21,7 @@ on its own only for tooling that speaks to a Hiero network directly.
 
 ## Requirements
 
-- Ruby >= 3.2
+- Ruby >= 4.0
 
 ## Development
 

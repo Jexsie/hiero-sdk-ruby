@@ -15,8 +15,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.2 is the supported floor, set by the SDK's use of Data.define.
-        ruby: ["3.2", "3.3", "3.4", "4.0"]
+        # 4.0 is the supported floor. Nothing ships above it yet, so the matrix
+        # has a single entry; it exists so widening support is a one-line change.
+        ruby: ["4.0"]
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
@@ -32,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.4"
+          ruby-version: "4.0"
           bundler-cache: true
       # Regenerates from the vendored .proto sources and fails if the result
       # differs from what is committed. This is why grpc-tools is pinned in the
@@ -46,7 +47,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.4"
+          ruby-version: "4.0"
           bundler-cache: true
       - run: bundle exec rake build
       # Building a gem and installing one are different things: a gem can build
