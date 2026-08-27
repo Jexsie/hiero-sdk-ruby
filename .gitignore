@@ -2,6 +2,10 @@
 arch.md
 ruby-sdk-design.md
 
+# --- Copied into the gem at build time by `rake build` ----------------------
+proto/LICENSE
+proto/NOTICE
+
 # --- Ruby -------------------------------------------------------------------
 *.gem
 *.rbc
