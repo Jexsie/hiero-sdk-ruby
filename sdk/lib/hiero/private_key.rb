@@ -28,10 +28,16 @@ module Hiero
 
     attr_reader :algorithm
 
-    def initialize(bytes, algorithm)
+    # The BIP-32 / SLIP-10 chain code, present only on keys that came from a seed
+    # or from deriving another key. A key parsed from bytes has no chain code and
+    # cannot derive children; there is nothing to derive them from.
+    attr_reader :chain_code
+
+    def initialize(bytes, algorithm, chain_code: nil)
       raise ArgumentError, "unknown algorithm #{algorithm.inspect}" unless ALGORITHMS.include?(algorithm)
 
       @bytes = bytes.b.freeze
+      @chain_code = chain_code&.b&.freeze
       @algorithm = algorithm
       validate!
       # Derived up front rather than memoised, because the instance is frozen and
@@ -85,6 +91,22 @@ module Hiero
       def from_string_ed25519(text) = from_bytes_ed25519(Encoding.decode_hex(text))
       def from_string_ecdsa(text)   = from_bytes_ecdsa(Encoding.decode_hex(text))
 
+      # The master key of a SLIP-10 Ed25519 tree.
+      #
+      # @param seed [String] a BIP-39 seed
+      def from_seed_ed25519(seed)
+        key, chain_code = Crypto::Slip10.from_seed(seed)
+        new(key, :ed25519, chain_code: chain_code)
+      end
+
+      # The master key of a BIP-32 secp256k1 tree.
+      #
+      # @param seed [String] a BIP-39 seed
+      def from_seed_ecdsa(seed)
+        key, chain_code = Crypto::Bip32.from_seed(seed)
+        new(key, :ecdsa, chain_code: chain_code)
+      end
+
       def from_der(bytes)
         bytes = bytes.b
         if (raw = strip_prefix(bytes, ED25519_DER_PREFIX))
@@ -124,6 +146,33 @@ module Hiero
       end
     end
 
+    # @return [Boolean] whether this key carries a chain code and can derive children
+    def derivable? = !@chain_code.nil?
+
+    # Derives a child key.
+    #
+    # The two algorithms differ in what an index means. Ed25519 derivation is
+    # hardened at every level, so indices are given unhardened and hardened for
+    # you. secp256k1 supports both, so the index is used exactly as given -- wrap
+    # it in {Crypto::Bip32.harden} for a hardened child.
+    #
+    # @param index [Integer]
+    # @return [PrivateKey]
+    def derive(index)
+      raise BadKeyError, "this key has no chain code and cannot derive children" unless derivable?
+
+      key, code = if ed25519?
+                    Crypto::Slip10.derive(@bytes, @chain_code, index)
+                  else
+                    Crypto::Bip32.derive(@bytes, @chain_code, index)
+                  end
+
+      self.class.new(key, @algorithm, chain_code: code)
+    end
+
+    # Walks a whole path in one call, for example `key.derive_path(44, 3030, 0)`.
+    def derive_path(*indices) = indices.flatten.reduce(self) { |key, index| key.derive(index) }
+
     def to_bytes_raw = @bytes
     def to_bytes_der = der_prefix + @bytes
     def to_bytes     = to_bytes_der
@@ -141,6 +190,8 @@ module Hiero
     def _dump(_depth) = raise(BadKeyError, "refusing to Marshal a private key; use #to_string_der explicitly")
     def encode_with(_coder) = raise(BadKeyError, "refusing to serialise a private key to YAML; use #to_string_der explicitly")
 
+    # Compares the key material only. Two keys that sign identically are equal even
+    # if one carries a chain code and the other does not.
     def ==(other)
       other.is_a?(PrivateKey) && other.algorithm == @algorithm && other.to_bytes_raw == @bytes
     end
