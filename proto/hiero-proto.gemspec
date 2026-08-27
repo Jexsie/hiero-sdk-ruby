@@ -19,7 +19,9 @@ Gem::Specification.new do |spec|
     depend on hiero-sdk instead of using these classes directly.
   DESC
 
-  spec.homepage = "https://github.com/hiero-ledger/hiero-sdk-ruby"
+  # Hosted personally while the SDK stabilises; to be transferred to the
+  # hiero-ledger organisation once it is ready.
+  spec.homepage = "https://github.com/Jexsie/hiero-sdk-ruby"
   spec.metadata = {
     "homepage_uri"      => spec.homepage,
     "bug_tracker_uri"   => "#{spec.homepage}/issues",

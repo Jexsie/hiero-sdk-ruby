@@ -80,3 +80,8 @@ Every namespace also has its own entry file (`require "hiero/proto/services"`), 
 ## Licence
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+---
+
+This repository is hosted personally while the SDK stabilises, and is intended to move to the
+[hiero-ledger](https://github.com/hiero-ledger) organisation once it is ready.
