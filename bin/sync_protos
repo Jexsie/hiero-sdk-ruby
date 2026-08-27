@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+#
+# Vendor the Hiero .proto sources into proto/hapi/.
+#
+#   bin/sync_protos                        # re-sync both pins as recorded
+#   bin/sync_protos --hapi v0.77.0         # move the consensus-node pin
+#   bin/sync_protos --mirror v0.162.0      # move the mirror-node pin
+#
+# The protos come from two upstream repositories:
+#
+#   hiero-consensus-node   the HAPI services, messages, streams and platform state
+#   hiero-mirror-node      the mirror ConsensusService (topic subscriptions), which
+#                          lives only in the mirror node repository
+#
+# Both are fetched with a blobless, shallow, sparse checkout rather than carried as
+# git submodules: hiero-consensus-node alone is ~570 MB and we need ~1.4 MB of it.
+#
+# Note: hiero-mirror-node also ships a network_service.proto that duplicates the
+# consensus node's mirror/mirror_network_service.proto (same package, same
+# NetworkService). Only consensus_service.proto is taken from the mirror node, or
+# protoc would fail on duplicate symbols.
+#
+set -euo pipefail
+
+HAPI_REPO="https://github.com/hiero-ledger/hiero-consensus-node.git"
+HAPI_SUBDIR="hapi/hedera-protobuf-java-api/src/main/proto"
+
+MIRROR_REPO="https://github.com/hiero-ledger/hiero-mirror-node.git"
+MIRROR_SUBDIR="protobuf/src/main/proto/com/hedera/mirror/api/proto"
+MIRROR_FILES=("consensus_service.proto")
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEST="$ROOT/proto/hapi"
+WORK="$ROOT/tmp/hapi-sync"
+HAPI_VERSION_FILE="$ROOT/proto/HAPI_VERSION"
+MIRROR_VERSION_FILE="$ROOT/proto/MIRROR_VERSION"
+
+read_pin() {
+  local file="$1" name="$2"
+  if [[ ! -f "$file" ]]; then
+    echo "error: no $name tag given and $file does not exist" >&2
+    exit 1
+  fi
+  tr -d '[:space:]' < "$file"
+}
+
+HAPI_TAG=""
+MIRROR_TAG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --hapi)   HAPI_TAG="${2:?--hapi needs a tag}";   shift 2 ;;
+    --mirror) MIRROR_TAG="${2:?--mirror needs a tag}"; shift 2 ;;
+    -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "error: unknown argument '$1'" >&2; exit 1 ;;
+  esac
+done
+
+[[ -n "$HAPI_TAG"   ]] || HAPI_TAG="$(read_pin "$HAPI_VERSION_FILE" HAPI)"
+[[ -n "$MIRROR_TAG" ]] || MIRROR_TAG="$(read_pin "$MIRROR_VERSION_FILE" mirror)"
+
+# sparse_fetch <url> <tag> <subdir> <workdir>
+sparse_fetch() {
+  local url="$1" tag="$2" subdir="$3" work="$4"
+  rm -rf "$work"
+  mkdir -p "$(dirname "$work")"
+  git clone --quiet --filter=blob:none --no-checkout --depth 1 --branch "$tag" "$url" "$work"
+  git -C "$work" sparse-checkout set --no-cone "/$subdir/*"
+  git -C "$work" checkout --quiet
+  if [[ ! -d "$work/$subdir" ]]; then
+    echo "error: $subdir not found at $tag in $url — has the layout moved?" >&2
+    exit 1
+  fi
+}
+
+echo "==> Syncing HAPI protos from hiero-consensus-node $HAPI_TAG"
+sparse_fetch "$HAPI_REPO" "$HAPI_TAG" "$HAPI_SUBDIR" "$WORK/hapi"
+
+# Replace wholesale so that protos deleted upstream disappear here too.
+rm -rf "$DEST"
+mkdir -p "$DEST"
+tar -C "$WORK/hapi/$HAPI_SUBDIR" -cf - . | tar -C "$DEST" -xf -
+
+echo "==> Syncing mirror ConsensusService from hiero-mirror-node $MIRROR_TAG"
+sparse_fetch "$MIRROR_REPO" "$MIRROR_TAG" "$MIRROR_SUBDIR" "$WORK/mirror"
+mkdir -p "$DEST/mirror"
+for f in "${MIRROR_FILES[@]}"; do
+  cp "$WORK/mirror/$MIRROR_SUBDIR/$f" "$DEST/mirror/$f"
+done
+
+printf '%s\n' "$HAPI_TAG"   > "$HAPI_VERSION_FILE"
+printf '%s\n' "$MIRROR_TAG" > "$MIRROR_VERSION_FILE"
+rm -rf "$WORK"
+
+COUNT="$(find "$DEST" -name '*.proto' | wc -l | tr -d '[:space:]')"
+SIZE="$(du -sh "$DEST" | cut -f1 | tr -d '[:space:]')"
+echo "==> Vendored $COUNT .proto files ($SIZE) into proto/hapi/"
+echo "==> Next: bin/generate_protos"
