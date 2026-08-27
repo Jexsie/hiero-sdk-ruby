@@ -1,0 +1,34 @@
+# --- Design scratch (intentionally untracked) -------------------------------
+arch.md
+ruby-sdk-design.md
+
+# --- Ruby -------------------------------------------------------------------
+*.gem
+*.rbc
+/.bundle/
+/.yardoc/
+/_yardoc/
+/coverage/
+/doc/
+/pkg/
+/spec/reports/
+/tmp/
+.rspec_status
+Gemfile.lock
+*/Gemfile.lock
+
+# --- Type checking ----------------------------------------------------------
+/.steep/
+/sig/generated/
+
+# --- Proto sync workspace ---------------------------------------------------
+# Vendored .proto sources ARE committed (see proto/hapi/); only the transient
+# sparse-checkout used by bin/sync_protos is ignored.
+/tmp/hapi-sync/
+
+# --- Editors / OS -----------------------------------------------------------
+.DS_Store
+*.swp
+*~
+/.idea/
+/.vscode/

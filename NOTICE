@@ -1,0 +1,9 @@
+Hiero Ruby SDK
+Copyright 2026 Hiero a Series of LF Projects, LLC
+
+This product includes software developed at
+The Linux Foundation (https://www.linuxfoundation.org/).
+
+This product vendors Protocol Buffer definitions from the Hiero consensus node
+(https://github.com/hiero-ledger/hiero-consensus-node), which is licensed under
+the Apache License, Version 2.0. See proto/hapi/ and proto/HAPI_VERSION.
