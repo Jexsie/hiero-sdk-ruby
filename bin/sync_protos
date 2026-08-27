@@ -3,6 +3,7 @@
 # Vendor the Hiero .proto sources into proto/hapi/.
 #
 #   bin/sync_protos                        # re-sync both pins as recorded
+#   bin/sync_protos --latest               # move both pins to the latest stable release
 #   bin/sync_protos --hapi v0.77.0         # move the consensus-node pin
 #   bin/sync_protos --mirror v0.162.0      # move the mirror-node pin
 #
@@ -44,16 +45,41 @@ read_pin() {
   tr -d '[:space:]' < "$file"
 }
 
+# GitHub's releases/latest endpoint already excludes drafts and pre-releases, so
+# this follows stable releases only -- never an -rc or -alpha tag.
+latest_release() {
+  local repo="$1" tag
+  tag="$(curl -fsSL --max-time 30 "https://api.github.com/repos/${repo}/releases/latest" \
+         | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')"
+  if [[ -z "$tag" ]]; then
+    echo "error: could not resolve the latest release of ${repo}" >&2
+    exit 1
+  fi
+  printf '%s' "$tag"
+}
+
 HAPI_TAG=""
 MIRROR_TAG=""
+LATEST=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --latest) LATEST=1; shift ;;
     --hapi)   HAPI_TAG="${2:?--hapi needs a tag}";   shift 2 ;;
     --mirror) MIRROR_TAG="${2:?--mirror needs a tag}"; shift 2 ;;
-    -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "error: unknown argument '$1'" >&2; exit 1 ;;
   esac
 done
+
+if [[ $LATEST -eq 1 ]]; then
+  if [[ -n "$HAPI_TAG" || -n "$MIRROR_TAG" ]]; then
+    echo "error: --latest cannot be combined with an explicit --hapi or --mirror tag" >&2
+    exit 1
+  fi
+  echo "==> Resolving the latest stable releases"
+  HAPI_TAG="$(latest_release hiero-ledger/hiero-consensus-node)"
+  MIRROR_TAG="$(latest_release hiero-ledger/hiero-mirror-node)"
+fi
 
 [[ -n "$HAPI_TAG"   ]] || HAPI_TAG="$(read_pin "$HAPI_VERSION_FILE" HAPI)"
 [[ -n "$MIRROR_TAG" ]] || MIRROR_TAG="$(read_pin "$MIRROR_VERSION_FILE" mirror)"

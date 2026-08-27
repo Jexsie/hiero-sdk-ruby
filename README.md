@@ -42,10 +42,13 @@ repositories that define them:
 | [`hiero-mirror-node`](https://github.com/hiero-ledger/hiero-mirror-node) | The mirror `ConsensusService`, whose `subscribeTopic` RPC backs topic subscriptions and exists nowhere else | [`proto/MIRROR_VERSION`](proto/MIRROR_VERSION) |
 
 They are copied in rather than carried as git submodules: `hiero-consensus-node` alone is
-around 570 MB, and this SDK needs about 1.4 MB of it.
+around 570 MB, and this SDK needs about 1.4 MB of it. `--latest` follows GitHub's
+`releases/latest`, which excludes drafts and pre-releases, so it never picks up an `-rc` or
+`-alpha` tag.
 
 ```sh
 bin/sync_protos                    # re-sync both pins as recorded
+bin/sync_protos --latest           # move both pins to the latest stable release
 bin/sync_protos --hapi v0.77.0     # move the consensus node pin
 bin/sync_protos --mirror v0.162.0  # move the mirror node pin
 
