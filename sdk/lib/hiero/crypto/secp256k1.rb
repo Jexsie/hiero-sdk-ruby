@@ -43,6 +43,23 @@ module Hiero
           point(scalar(private_key)).to_octet_string(:uncompressed)
         end
 
+        # Recovers the full curve point from a compressed public key. Needed for
+        # EVM addresses, which are derived from the uncompressed form.
+        #
+        # @param public_key [String] a compressed or uncompressed public key
+        # @return [String] the 65-byte uncompressed public key
+        def decompress(public_key)
+          curve_point(public_key).to_octet_string(:uncompressed)
+        end
+
+        # @return [Boolean] whether the bytes are a point on secp256k1
+        def valid_public_key?(public_key)
+          curve_point(public_key)
+          true
+        rescue ArgumentError, OpenSSL::PKey::EC::Point::Error, OpenSSL::BNError
+          false
+        end
+
         # Signs a digest that has ALREADY been hashed. Callers pass
         # Keccak.digest(message); this does not hash for them, because signing the
         # wrong digest is silent and unrecoverable and the choice belongs at the
@@ -88,6 +105,10 @@ module Hiero
           false
         end
 
+        def curve_point(public_key)
+          OpenSSL::PKey::EC::Point.new(GROUP, OpenSSL::BN.new(public_key.b.unpack1("H*"), 16))
+        end
+
         def generate_private_key
           loop do
             candidate = OpenSSL::Random.random_bytes(PRIVATE_KEY_LENGTH)
@@ -124,10 +145,11 @@ module Hiero
 
         def hmac(key, data) = OpenSSL::HMAC.digest("SHA256", key, data)
 
+
         def point(scalar_value) = GROUP.generator.mul(OpenSSL::BN.new(scalar_value))
 
         def openssl_public_key(public_key)
-          point = OpenSSL::PKey::EC::Point.new(GROUP, OpenSSL::BN.new(public_key.b.unpack1("H*"), 16))
+          point = curve_point(public_key)
           asn1 = OpenSSL::ASN1::Sequence([
             OpenSSL::ASN1::Sequence([
               OpenSSL::ASN1::ObjectId("id-ecPublicKey"),

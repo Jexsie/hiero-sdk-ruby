@@ -29,7 +29,7 @@ RSpec.describe Hiero::Crypto::Ed25519 do
     it "round-trips the private key through the Hiero DER form" do
       der = described_class.seed_to_der(seed)
 
-      expect(der.unpack1("H*")).to eq(Vectors::ED25519_PRIVATE_DER)
+      expect(der.unpack1("H*")).to eq(Vectors::ED25519_SEED_DER)
       expect(described_class.seed_from_der(der)).to eq(seed)
     end
 
