@@ -5,25 +5,93 @@ module Hiero
     # Keccak-256, as used by Ethereum and by Hiero for ECDSA message hashing and
     # EVM address derivation.
     #
-    # This is the ORIGINAL Keccak, not the standardised SHA3-256 that OpenSSL
-    # provides. They differ only in the padding byte -- 0x01 here against 0x06 for
-    # SHA3 -- which means SHA3-256 will happily return a plausible-looking digest
-    # that is wrong for every Ethereum-compatible purpose. Reaching for
-    # OpenSSL::Digest("SHA3-256") is the single easiest way to break EVM addresses.
+    # == This is NOT SHA3-256
     #
-    # A pure-Ruby implementation is used by default so the SDK needs no native
-    # cryptography dependency. If the optional digest-keccak gem is installed it is
-    # picked up automatically and is around 400x faster; results are identical
-    # either way.
+    # Keccak won the SHA-3 competition in 2012. When NIST standardised it as
+    # FIPS 202 in 2015 they appended a two-bit domain separator to the input,
+    # changing the first padding byte from 0x01 to 0x06. The permutation is
+    # untouched -- only that byte differs. Ethereum had already shipped against
+    # the original submission, so "keccak256" and "SHA3-256" are two different
+    # hashes that agree on nothing but their output length.
+    #
+    #   OpenSSL::Digest.new("SHA3-256").digest("")  # => a7ffc6f8bf1ed766...
+    #   Hiero::Crypto::Keccak.digest("")            # => c5d2460186f7233c...
+    #
+    # Both are valid 32-byte digests. Only the second one produces correct EVM
+    # addresses. Reaching for OpenSSL's SHA3-256 is the single easiest way to
+    # break this SDK, and it fails silently -- see spec/crypto/keccak_spec.rb,
+    # which asserts the two differ.
+    #
+    # == Why this is implemented here
+    #
+    # Ruby's stdlib has SHA3 but not original Keccak, so the alternative is a C
+    # extension, which forces a compiler toolchain onto everyone installing the
+    # SDK. Every major SDK in other languages solves this the same way we do --
+    # with a pure-language implementation:
+    #
+    #   ethers.js / viem  ->  @noble/hashes (pure JS)
+    #   web3.js           ->  js-sha3       (pure JS)
+    #   Go                ->  x/crypto/sha3 (pure Go)
+    #   Java              ->  Bouncy Castle (pure Java)
+    #
+    # The specification is frozen -- it cannot change without invalidating every
+    # Ethereum address in existence -- so this file has no upstream to track.
+    # Correctness is pinned by the cross-SDK conformance vectors; if anything
+    # here drifts, those fail loudly.
+    #
+    # The optional digest-keccak gem is used automatically when present and is
+    # roughly 400x faster. Results are identical either way, and NATIVE below
+    # proves that with a known-answer test rather than assuming it.
+    #
+    # == References
+    #
+    # [1] The Keccak Reference, v3.0 (Bertoni, Daemen, Peeters, Van Assche, 2011)
+    #     https://keccak.team/files/Keccak-reference-3.0.pdf
+    # [2] Keccak specifications summary -- the step pseudocode and constant
+    #     tables this file follows directly
+    #     https://keccak.team/keccak_specs_summary.html
+    # [3] FIPS 202 (SHA-3). Same permutation, different padding. Section numbers
+    #     cited below refer to this document as it is the more precise text.
+    #     https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
+    # [4] Why Ethereum's keccak256 != SHA3-256
+    #     https://ethereum.stackexchange.com/q/550
     module Keccak
+      # Ruby integers are arbitrary-precision, so every shift and complement has
+      # to be masked back down to 64 bits by hand. C gets this for free from the
+      # width of uint64_t.
       MASK64 = 0xFFFF_FFFF_FFFF_FFFF
 
-      # Rotation offsets and lane permutation for the rho and pi steps.
+      # Rate, in bytes: the portion of the 200-byte state that absorbs input.
+      #
+      #   (1600 - 2 * 256) / 8 = 136
+      #
+      # The remaining 64 bytes are the "capacity" and are never touched by input
+      # or output -- that reserve is what provides the security margin. FIPS 202
+      # section 5.2. [3]
+      RATE = 136
+
+      # Rho step rotation offsets, in the lane order the rho/pi loop below walks.
+      #
+      # Each is the triangular number t(t+1)/2 mod 64 for t = 1..24, which is how
+      # the specification defines them. [2] Precomputed here rather than derived
+      # at load so the table can be eyeballed against the reference.
       ROTATION = [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14,
                   27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44].freeze
-      PERMUTE  = [10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4,
-                  15, 23, 19, 13, 12, 2, 20, 14, 22, 9, 6, 1].freeze
 
+      # Pi step lane permutation: destination index for each step of the same
+      # loop. Starting from lane 1, the sequence 1 -> 10 -> 7 -> 11 -> ... visits
+      # all 24 non-centre lanes exactly once and closes back on lane 1, which is
+      # what lets rho and pi be applied together in one pass. [2]
+      PERMUTE = [10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4,
+                 15, 23, 19, 13, 12, 2, 20, 14, 22, 9, 6, 1].freeze
+
+      # Iota step round constants, one per round. Generated by a degree-8 LFSR;
+      # hardcoded here because the sequence is fixed forever. FIPS 202 section
+      # 3.2.5, Algorithm 5. [3]
+      #
+      # Their only job is to break the symmetry of the other four steps, which
+      # are all identical across rounds. Without them the permutation would have
+      # exploitable fixed points.
       ROUND_CONSTANTS = [
         0x0000000000000001, 0x0000000000008082, 0x800000000000808a, 0x8000000080008000,
         0x000000000000808b, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009,
@@ -33,12 +101,38 @@ module Hiero
         0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008
       ].freeze
 
-      # Whether the optional native implementation was found. Exposed so that
-      # applications can assert on it when hashing throughput actually matters.
+      # Keccak-256 of the empty string, from the reference test vectors. [1]
+      #
+      # Used as a known-answer test against the optional native gem. Worth
+      # knowing the near-miss: SHA3-256 of the empty string is a7ffc6f8bf1ed766,
+      # so if you ever see that value here, the wrong algorithm is wired up.
+      EMPTY_DIGEST = "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+
+      # Whether the optional native implementation was found AND verified.
+      #
+      # The verification is not paranoia. Both the digest-keccak and keccak gems
+      # register the same `digest/keccak` path and define the same
+      # `Digest::Keccak` constant, so in an application that already depends on
+      # eth.rb the require here may silently resolve to a different gem's C code.
+      # A wrong implementation would produce plausible 32-byte digests and wrong
+      # addresses everywhere -- exactly the failure this file exists to prevent.
+      # One hash at load time turns that assumption into an assertion.
+      #
+      # Exposed publicly so applications that care about hashing throughput can
+      # assert on it in their own boot checks.
       NATIVE = begin
         require "digest/keccak"
-        true
+        if Digest::Keccak.digest("", 256).unpack1("H*") == EMPTY_DIGEST
+          true
+        else
+          warn "[hiero-sdk] Digest::Keccak is loaded but failed its known-answer " \
+               "test; falling back to the pure-Ruby implementation. Check for a " \
+               "conflicting gem registering digest/keccak."
+          false
+        end
       rescue LoadError
+        # Expected and fine -- the gem is optional and the pure path below is
+        # fully functional. Not warned about, or every install would be noisy.
         false
       end
 
@@ -51,73 +145,152 @@ module Hiero
           pure_digest(message)
         end
 
+        # @param message [String] bytes to hash
         # @return [String] the 32-byte digest as lowercase hex
         def hexdigest(message) = digest(message).unpack1("H*")
 
-        # The pure-Ruby path, always available and used by the specs to prove the
-        # two implementations agree.
+        # The pure-Ruby path. Always available regardless of NATIVE, and kept
+        # public so the specs can prove both implementations agree.
+        #
+        # This is the sponge construction (FIPS 202 section 5.2 [3]): input is
+        # padded to a whole number of blocks, each block is XORed ("absorbed")
+        # into the state and followed by a permutation, then the digest is read
+        # ("squeezed") back out of the state.
+        #
+        # @param message [String] bytes to hash
+        # @return [String] the 32-byte digest, binary encoded
         def pure_digest(message)
-          rate  = 136 # (1600 - 256 * 2) / 8
+          # The state is 1600 bits viewed as 25 lanes of 64 bits. The spec
+          # arranges it as a 5x5 grid; we flatten it to index x + 5y, which is
+          # the layout the ROTATION and PERMUTE tables above assume.
           state = Array.new(25, 0)
 
-          padded(message.b, rate).bytes.each_slice(rate) do |block|
-            block.each_slice(8).with_index do |lane, i|
-              state[i] ^= lane.each_with_index.sum { |byte, k| byte << (8 * k) }
-            end
+          # ABSORB. Padding guarantees a multiple of RATE, and RATE is a multiple
+          # of 8, so the whole padded message unpacks cleanly into 64-bit
+          # little-endian lanes -- 17 of them (136 / 8) per block.
+          padded(message.b).unpack("Q<*").each_slice(RATE / 8) do |block|
+            # Only the first 17 lanes take input. Lanes 17-24 are the capacity
+            # and are deliberately left alone.
+            block.each_with_index { |lane, i| state[i] ^= lane }
             permute!(state)
           end
 
+          # SQUEEZE. We need 32 bytes and the rate is 136, so the first four
+          # lanes are enough and no further permutation is required. Longer
+          # outputs would loop: emit RATE bytes, permute, repeat.
           state[0, 4].pack("Q<4")
         end
 
         private
 
-        def padded(message, rate)
-          out = +"#{message}\x01"
-          out << "\x00" while (out.bytesize % rate) != 0
-          out.setbyte(out.bytesize - 1, out.getbyte(out.bytesize - 1) | 0x80)
-          out
+        # Appends the pad10*1 padding of FIPS 202 section 5.1 [3], with the
+        # original Keccak domain byte 0x01 rather than SHA-3's 0x06.
+        #
+        # The rule is: a 0x01 start byte, zeros, and the high bit set on the
+        # final byte. Three boundaries are where hand-rolled implementations
+        # typically break, so note how each falls out here:
+        #
+        #   135 bytes in -> pad_len 1   -> start and end bit share one byte, 0x81
+        #   136 bytes in -> pad_len 136 -> a full extra block of padding, not zero
+        #     0 bytes in -> pad_len 136 -> one block; empty input still hashes
+        #
+        # Building the padding separately and concatenating once keeps the
+        # message string binary-encoded throughout. Interpolating into a literal
+        # would work only by way of Ruby's encoding-compatibility rules, which is
+        # too subtle to rely on in a primitive.
+        def padded(message)
+          pad_len = RATE - (message.bytesize % RATE) # == RATE when already aligned
+          pad = "\x00".b * pad_len
+          pad.setbyte(0, 0x01)
+          pad.setbyte(pad_len - 1, pad.getbyte(pad_len - 1) | 0x80)
+          message + pad
         end
 
+        # 64-bit left rotation. Bits shifted off the top wrap to the bottom;
+        # the mask discards the arbitrary-precision overflow Ruby would keep.
         def rotl(value, count) = ((value << count) | (value >> (64 - count))) & MASK64
 
+        # The Keccak-f[1600] permutation: 24 rounds of five steps.
+        #
+        # theta - diffusion across columns
+        # rho   - rotate each lane (diffusion within lanes)
+        # pi    - move lanes around the grid
+        # chi   - the only non-linear step
+        # iota  - XOR in a round constant to break symmetry
+        #
+        # FIPS 202 section 3.2. [3] rho and pi are fused into one pass below.
         def permute!(state)
           ROUND_CONSTANTS.each do |round_constant|
             theta!(state)
             rho_pi!(state)
             chi!(state)
-            state[0] ^= round_constant
+            state[0] ^= round_constant # iota
           end
           state
         end
 
+        # THETA (FIPS 202 section 3.2.1 [3]).
+        #
+        # XOR each bit with the parity of two nearby columns. This is what makes
+        # a single flipped input bit reach the whole state within a couple of
+        # rounds.
         def theta!(state)
+          # All five column parities are computed up front, before any lane is
+          # written. Interleaving the two loops would feed already-modified lanes
+          # back into later parities -- a classic and completely silent bug.
           parity = (0..4).map { |x| state[x] ^ state[x + 5] ^ state[x + 10] ^ state[x + 15] ^ state[x + 20] }
+
           (0..4).each do |x|
+            # Combine the column to the left with the column to the right,
+            # rotated one bit. The rotation is what stops theta from being
+            # decomposable into independent slices.
             d = parity[(x + 4) % 5] ^ rotl(parity[(x + 1) % 5], 1)
             (0..4).each { |y| state[x + 5 * y] ^= d }
           end
         end
 
+        # RHO + PI (FIPS 202 sections 3.2.2 and 3.2.3 [3]).
+        #
+        # Rho rotates each lane by a fixed offset; pi relocates it. Because the
+        # PERMUTE sequence is a single cycle over the 24 non-centre lanes, both
+        # can be done in one pass with a single carried value -- no scratch copy
+        # of the state, which is why this is the shape every reference
+        # implementation uses.
+        #
+        # Lane 0 (the centre) is deliberately never moved or rotated; it is the
+        # fixed point of pi.
         def rho_pi!(state)
           carried = state[1]
           24.times do |i|
             target = PERMUTE[i]
-            held = state[target]
-            state[target] = rotl(carried, ROTATION[i])
-            carried = held
+            held = state[target]                        # save before overwriting
+            state[target] = rotl(carried, ROTATION[i])  # place the previous lane
+            carried = held                              # and carry this one on
           end
         end
 
+        # CHI (FIPS 202 section 3.2.4 [3]).
+        #
+        # The only non-linear step in Keccak, and therefore the entire source of
+        # its resistance to algebraic attack. Each bit is combined with the two
+        # to its right in the same row: a ^ (~b & c).
         def chi!(state)
           (0..4).each do |y|
+            # Snapshot the row first. chi is defined over the row as it was on
+            # entry, so reading state[] directly inside the inner loop would use
+            # values this same loop has already rewritten.
             row = state[5 * y, 5]
+
             (0..4).each do |x|
+              # ~row[...] is masked because Ruby's complement of a positive
+              # integer is negative and unbounded, unlike C's on a uint64_t.
               state[x + 5 * y] = row[x] ^ ((~row[(x + 1) % 5] & MASK64) & row[(x + 2) % 5])
             end
           end
         end
       end
+
+      private_constant :MASK64, :ROTATION, :PERMUTE, :ROUND_CONSTANTS
     end
   end
 end
