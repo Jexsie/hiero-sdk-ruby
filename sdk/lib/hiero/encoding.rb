@@ -24,5 +24,29 @@ module Hiero
 
       [cleaned].pack("H*")
     end
+
+    # A 20-byte EVM address, given either as raw bytes or as hex.
+    #
+    # Both arrive as Ruby Strings, so the two are told apart by length: an address
+    # is 20 bytes raw and 40 characters as hex, which never collide. Guessing by
+    # content instead would misread raw bytes that happen to be all ASCII hex
+    # digits.
+    #
+    # @return [String, nil] 20 binary bytes
+    def decode_evm_address(value)
+      return nil if value.nil?
+
+      bytes = value.b
+      return bytes if bytes.bytesize == EVM_ADDRESS_LENGTH
+
+      decoded = decode_hex(value)
+      unless decoded.bytesize == EVM_ADDRESS_LENGTH
+        raise ArgumentError, "an EVM address is #{EVM_ADDRESS_LENGTH} bytes, got #{decoded.bytesize}"
+      end
+
+      decoded
+    end
+
+    EVM_ADDRESS_LENGTH = 20
   end
 end

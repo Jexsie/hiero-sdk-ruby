@@ -26,6 +26,11 @@ module Hiero
     end
   end
 
+  # An entity identifier could not be parsed, or carries a checksum that does not
+  # match the network it was used against -- usually a mainnet identifier pasted
+  # into a testnet application, or the reverse.
+  class BadEntityIdError < Error; end
+
   # A derivation index produced an invalid key. Specified by BIP-32 and vanishingly
   # rare; the remedy is to use the next index.
   class KeyDerivationError < Error; end
