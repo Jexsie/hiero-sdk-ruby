@@ -14,7 +14,7 @@ One repository, two gems.
 | Path | Gem | Contents |
 | --- | --- | --- |
 | [`proto/`](proto/) | `hiero-proto` | Protobuf message classes and gRPC service stubs for the Hiero API. Generated and committed, so installing it never requires `protoc`. |
-| [`sdk/`](sdk/) | `hiero-sdk` | The SDK proper: client, execution engine, transactions, queries, keys and value types. *In progress — cryptography primitives only so far.* |
+| [`sdk/`](sdk/) | `hiero-sdk` | The SDK proper: client, execution engine, transactions, queries, keys and value types. *In progress — the offline half is done: cryptography, keys, mnemonics, entity identifiers and value types. Nothing talks to a network yet.* |
 
 Most applications will depend on `hiero-sdk`. `hiero-proto` is the transport layer, useful
 on its own only for tooling that speaks to a Hiero network directly.
@@ -69,7 +69,8 @@ bin/sync_protos --hapi v0.77.0     # move the consensus node pin
 bin/sync_protos --mirror v0.162.0  # move the mirror node pin
 
 bin/generate_protos                # regenerate proto/lib/hiero/proto/**
-bundle exec rake protos:check      # fail if the committed output is stale
+bin/generate_status                # regenerate sdk/lib/hiero/status.rb from the same protos
+bundle exec rake protos:check      # fail if either committed output is stale
 ```
 
 Both the vendored `.proto` files and the generated Ruby are committed, so a HAPI bump

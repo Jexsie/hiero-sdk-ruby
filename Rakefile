@@ -28,9 +28,14 @@ namespace :protos do
     sh "bin/generate_protos"
   end
 
+  desc "Regenerate sdk/lib/hiero/status.rb from the HAPI response codes"
+  task :status do
+    sh "bin/generate_status"
+  end
+
   desc "Fail if the committed generated output is stale"
-  task check: :generate do
-    sh "git diff --exit-code -- proto/lib" do |ok, _res|
+  task check: %i[generate status] do
+    sh "git diff --exit-code -- proto/lib sdk/lib/hiero/status.rb" do |ok, _res|
       unless ok
         abort "generated protobuf output is out of date -- run bin/generate_protos and commit the result"
       end
