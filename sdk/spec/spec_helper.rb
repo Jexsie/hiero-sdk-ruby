@@ -11,6 +11,49 @@ RSpec.configure do |config|
   config.disable_monkey_patching!
   config.order = :random
   Kernel.srand config.seed
+
+  # Integration specs need a running network, so they are opt-in:
+  #
+  #   bundle exec rake spec:integration
+  #   bundle exec rspec --tag integration ...
+  #
+  # Skipped rather than failed when nothing is listening, so a plain `rspec` is
+  # always green on a laptop with no network running.
+  config.filter_run_excluding(:integration) unless config.filter.rules[:integration]
+  config.before(:each, :integration) do
+    skip "no consensus node at #{Solo::ADDRESS}" unless Solo.reachable?
+  end
+end
+
+# A locally running Hiero network. Defaults match hiero-solo; override through the
+# environment for hiero-local-node or anything else.
+module Solo
+  ADDRESS      = ENV.fetch("HIERO_NODE_ADDRESS", "localhost:35211")
+  NODE_ACCOUNT = ENV.fetch("HIERO_NODE_ACCOUNT", "0.0.3")
+  MIRROR_REST  = ENV.fetch("HIERO_MIRROR_REST", "http://localhost:38081")
+
+  # The treasury, which exists on every network and always holds a balance.
+  TREASURY = "0.0.2"
+
+  def self.network = { ADDRESS => NODE_ACCOUNT }
+
+  def self.reachable?
+    return @reachable unless @reachable.nil?
+
+    host, port = ADDRESS.split(":")
+    @reachable =
+      begin
+        require "socket"
+        Socket.tcp(host, Integer(port), connect_timeout: 1, &:close)
+        true
+      rescue StandardError
+        false
+      end
+  end
+
+  def self.client(**options)
+    Hiero::Client.for_network(network, local: true, **options)
+  end
 end
 
 # Test vectors taken from the JavaScript SDK's cryptography suite

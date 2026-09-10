@@ -14,7 +14,15 @@ namespace :spec do
   end
 end
 
-desc "Run every spec suite"
+namespace :spec do
+  desc "Run the specs that need a running network (see Solo in spec_helper)"
+  RSpec::Core::RakeTask.new(:integration) do |t|
+    t.pattern = "sdk/spec/integration/**/*_spec.rb"
+    t.rspec_opts = "--require spec_helper -Isdk/spec -Isdk/lib --tag integration"
+  end
+end
+
+desc "Run every spec suite that does not need a network"
 task spec: ["spec:proto", "spec:sdk"]
 
 namespace :protos do
