@@ -21,6 +21,17 @@ module Hiero
   # registry that each concrete transaction populates as it loads, and it may be
   # the first thing an application calls. Left to autoload lazily, that registry
   # would still be empty.
+  # hiero-proto pulls in gRPC, a large native extension that the offline half of
+  # this SDK -- keys, mnemonics, identifiers, value types -- has no use for. It is
+  # loaded on first use by the transport layer instead of at require time, so
+  # wallet and address tooling that never opens a socket does not pay for it.
+  def self.protobuf!
+    @protobuf ||= begin
+      require "hiero/proto"
+      true
+    end
+  end
+
   @loader = Zeitwerk::Loader.for_gem
   # Both define several constants each, which is the one thing Zeitwerk's
   # file-per-constant rule cannot express, so they are required outright above.
