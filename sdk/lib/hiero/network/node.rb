@@ -64,6 +64,21 @@ module Hiero
 
       def record_use! = @mutex.synchronize { @use_count += 1 }
 
+      # The gRPC connection to this node, opened on first use.
+      #
+      # Lazy because a network may legitimately contain nodes that are currently
+      # down, and constructing the pool must not try to reach any of them.
+      def channel
+        @mutex.synchronize { @channel ||= Channel.new(@address) }
+      end
+
+      def close
+        @mutex.synchronize do
+          @channel&.close
+          @channel = nil
+        end
+      end
+
       # @param max_attempts [Integer] -1 to never evict, which is the default
       #   everywhere -- a node is far more often briefly unreachable than actually
       #   gone, and evicting it permanently is not recoverable without a restart.
