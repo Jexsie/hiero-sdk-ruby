@@ -64,6 +64,20 @@ module Hiero
     def cause = @underlying || super
   end
 
+  # A node refused the request before consensus -- a bad signature, an unknown
+  # entity, an insufficient balance. Nothing reached consensus and no fee was
+  # charged, which is what distinguishes this from a failure after consensus.
+  class PrecheckStatusError < Error
+    attr_reader :status, :node_account_id, :transaction_id
+
+    def initialize(status:, node_account_id:, transaction_id: nil)
+      @status = status
+      @node_account_id = node_account_id
+      @transaction_id = transaction_id
+      super("node #{node_account_id} rejected the request: #{status}")
+    end
+  end
+
   # A Client was used after being closed.
   class ClientClosedError < Error; end
 
