@@ -31,6 +31,9 @@ module Hiero
   # into a testnet application, or the reverse.
   class BadEntityIdError < Error; end
 
+  # A Client was used after being closed.
+  class ClientClosedError < Error; end
+
   # A derivation index produced an invalid key. Specified by BIP-32 and vanishingly
   # rare; the remedy is to use the next index.
   class KeyDerivationError < Error; end
