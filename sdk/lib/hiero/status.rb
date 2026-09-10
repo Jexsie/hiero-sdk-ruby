@@ -19,6 +19,11 @@ module Hiero
     # code => Status, for every code known at generation time.
     REGISTRY = {}
 
+    # name => Status. Needed because protobuf enum fields come back from
+    # google-protobuf as Symbols rather than Integers, so a response header
+    # yields :OK where the wire carried 0.
+    BY_NAME = {}
+
     def initialize(code, name)
       @code = code
       @name = name
@@ -32,7 +37,24 @@ module Hiero
       def from_code(code)
         REGISTRY.fetch(code) { allocate_unknown(code) }
       end
-      alias [] from_code
+
+      # @param name [Symbol, String]
+      def from_name(name)
+        BY_NAME.fetch(name.to_sym) do
+          raise ArgumentError, "no such status: #{name.inspect}"
+        end
+      end
+
+      # Accepts whatever a protobuf field or a caller is likely to hold: the
+      # integer code, the enum symbol, or a Status already.
+      def [](value)
+        case value
+        when Status then value
+        when Integer then from_code(value)
+        when Symbol, String then from_name(value)
+        else raise ArgumentError, "cannot interpret #{value.inspect} as a Status"
+        end
+      end
 
       # @return [Array<Status>] every status this SDK knows about
       def all = REGISTRY.values
@@ -40,6 +62,7 @@ module Hiero
       def define(code, name)
         status = send(:new, code, name)
         REGISTRY[code] = status
+        BY_NAME[name] = status
         const_set(name, status)
         status
       end
