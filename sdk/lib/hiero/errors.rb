@@ -31,6 +31,39 @@ module Hiero
   # into a testnet application, or the reverse.
   class BadEntityIdError < Error; end
 
+  # Every attempt was used, or the overall time budget ran out.
+  #
+  # #cause carries the last underlying failure, so Ruby's own exception chaining
+  # shows why the retries failed rather than burying it in a message string.
+  class MaxAttemptsError < Error
+    attr_reader :attempts, :node_account_id
+
+    def initialize(message, attempts:, node_account_id:, cause: nil)
+      super(message)
+      @attempts = attempts
+      @node_account_id = node_account_id
+      @underlying = cause
+    end
+
+    class << self
+      def exhausted(attempts, cause, node_account_id)
+        new("exhausted #{attempts} attempts#{because(cause)}",
+            attempts: attempts, node_account_id: node_account_id, cause: cause)
+      end
+
+      def timeout(attempts, budget, cause, node_account_id)
+        new("timed out after #{budget}s and #{attempts} attempts#{because(cause)}",
+            attempts: attempts, node_account_id: node_account_id, cause: cause)
+      end
+
+      def because(cause) = cause ? "; last failure: #{cause.message}" : ""
+    end
+
+    # Ruby only sets #cause automatically when raising from inside a rescue, and
+    # the last failure here was rescued several attempts ago.
+    def cause = @underlying || super
+  end
+
   # A Client was used after being closed.
   class ClientClosedError < Error; end
 
