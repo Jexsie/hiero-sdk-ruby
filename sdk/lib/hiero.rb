@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "monitor"
 require "zeitwerk"
 
 require_relative "hiero/version"
