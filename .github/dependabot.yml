@@ -1,0 +1,25 @@
+version: 2
+
+updates:
+  # Actions are pinned to commit SHAs, which cannot be updated by reading a tag.
+  # Dependabot rewrites the SHA and the trailing version comment together, which
+  # is what makes pinning sustainable rather than a one-off that rots.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: bundler
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      development:
+        patterns: ["*"]
+    # grpc-tools is pinned exactly so that regenerating the protobuf classes is
+    # deterministic. A bump is fine, but it has to come with regenerated output --
+    # the protos job fails otherwise, which is the intended prompt.
+    open-pull-requests-limit: 5
