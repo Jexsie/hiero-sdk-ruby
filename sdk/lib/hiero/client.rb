@@ -19,7 +19,12 @@ module Hiero
       max_backoff: 8.0,
       request_timeout: 120.0,
       grpc_deadline: 10.0,
-      max_query_payment: nil, # replaced with 1 hbar below, once Hbar is loaded
+      # Both replaced with real Hbar values below, once Hbar is loaded.
+      max_query_payment: nil,
+      # A ceiling the payer accepts, not a price. The network charges what the
+      # transaction actually costs and rejects it outright if that exceeds this,
+      # so it is a guard against a surprise bill rather than a fee to tune.
+      default_max_transaction_fee: nil,
       auto_validate_checksums: false
     }.freeze
 
@@ -30,7 +35,7 @@ module Hiero
     attr_reader :network, :ledger_id
     attr_accessor :operator, :max_attempts, :min_backoff, :max_backoff,
                   :request_timeout, :grpc_deadline, :max_query_payment,
-                  :auto_validate_checksums, :logger
+                  :default_max_transaction_fee, :auto_validate_checksums, :logger
 
     def initialize(network:, ledger_id: nil, operator: nil, local: false, **options)
       @network = Network::ManagedNetwork.new
@@ -41,7 +46,8 @@ module Hiero
       @closed = false
       @mutex = Monitor.new
 
-      settings = DEFAULTS.merge(max_query_payment: Hbar.new(1))
+      settings = DEFAULTS.merge(max_query_payment: Hbar.new(1),
+                                default_max_transaction_fee: Hbar.new(2))
       settings = settings.merge(max_attempts: LOCAL_MAX_ATTEMPTS) if local
       settings.merge(options).each { |name, value| public_send(:"#{name}=", value) }
     end
