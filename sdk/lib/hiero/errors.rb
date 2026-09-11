@@ -78,6 +78,25 @@ module Hiero
     end
   end
 
+  # A frozen transaction was modified. Its signatures cover the current body, so
+  # changing it would invalidate every signature already collected.
+  class TransactionFrozenError < Error; end
+
+  # A transaction reached consensus and failed there.
+  #
+  # Distinct from PrecheckStatusError because the consequences differ: this one
+  # was charged for. Code that retries on failure needs to know which it got, or
+  # it pays twice.
+  class ReceiptStatusError < Error
+    attr_reader :status, :transaction_id
+
+    def initialize(status:, transaction_id: nil)
+      @status = status
+      @transaction_id = transaction_id
+      super("transaction #{transaction_id} reached consensus and failed: #{status}")
+    end
+  end
+
   # A Client was used after being closed.
   class ClientClosedError < Error; end
 
