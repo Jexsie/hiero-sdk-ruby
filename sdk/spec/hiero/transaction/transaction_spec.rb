@@ -5,7 +5,7 @@ RSpec.describe Hiero::Transaction do
   let(:payer) { "0.0.1001" }
 
   def transfer
-    Hiero::Account::TransferTransaction.new
+    Hiero::TransferTransaction.new
       .add_hbar_transfer("0.0.1001", Hiero::Hbar.new(-1))
       .add_hbar_transfer("0.0.1002", Hiero::Hbar.new(1))
   end
@@ -166,12 +166,12 @@ RSpec.describe Hiero::Transaction do
       tx = frozen_transfer.sign(key)
       restored = described_class.from_bytes(tx.to_bytes)
 
-      expect(restored).to be_a(Hiero::Account::TransferTransaction)
+      expect(restored).to be_a(Hiero::TransferTransaction)
       expect(restored.hbar_transfers.values.map(&:to_tinybars)).to eq([-100_000_000, 100_000_000])
     end
 
     it "dispatches through the registry rather than importing every subclass" do
-      expect(described_class::REGISTRY[:cryptoTransfer]).to eq(Hiero::Account::TransferTransaction)
+      expect(described_class::REGISTRY[:cryptoTransfer]).to eq(Hiero::TransferTransaction)
     end
 
     it "keys the registry on protobuf's own casing" do

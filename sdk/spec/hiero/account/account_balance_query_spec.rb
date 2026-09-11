@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe Hiero::Account::AccountBalanceQuery do
+RSpec.describe Hiero::AccountBalanceQuery do
   describe "building the request" do
     it "asks for an account" do
       request = described_class.new(account_id: "1.2.3").make_request

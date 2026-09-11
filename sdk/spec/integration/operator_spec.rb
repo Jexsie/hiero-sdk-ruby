@@ -27,7 +27,7 @@ RSpec.describe "the configured operator", :integration, :operator do
   it "names an account that exists and is funded" do
     # A payer with no balance fails every paid request later, in ways that look
     # like SDK bugs rather than configuration.
-    balance = Hiero::Account::AccountBalanceQuery
+    balance = Hiero::AccountBalanceQuery
               .new(account_id: client.operator_account_id)
               .execute(client)
 

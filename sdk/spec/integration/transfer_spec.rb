@@ -10,14 +10,14 @@ RSpec.describe "transferring hbar on a live network", :integration, :operator do
   after { client.close }
 
   def balance_of(account_id)
-    Hiero::Account::AccountBalanceQuery.new(account_id: account_id).execute(client).hbars
+    Hiero::AccountBalanceQuery.new(account_id: account_id).execute(client).hbars
   end
 
   it "moves hbar and reports SUCCESS" do
     recipient = Solo::NODE_ACCOUNT
     before = balance_of(recipient)
 
-    response = Hiero::Account::TransferTransaction.new
+    response = Hiero::TransferTransaction.new
                                                   .add_hbar_transfer(payer, Hiero::Hbar.new(-1))
                                                   .add_hbar_transfer(recipient, Hiero::Hbar.new(1))
                                                   .set_transaction_memo("hiero-sdk-ruby integration")
@@ -38,7 +38,7 @@ RSpec.describe "transferring hbar on a live network", :integration, :operator do
     # never symmetrical.
     before = balance_of(payer)
 
-    Hiero::Account::TransferTransaction.new
+    Hiero::TransferTransaction.new
                                        .add_hbar_transfer(payer, Hiero::Hbar.new(-1))
                                        .add_hbar_transfer(Solo::NODE_ACCOUNT, Hiero::Hbar.new(1))
                                        .execute(client)
@@ -52,7 +52,7 @@ RSpec.describe "transferring hbar on a live network", :integration, :operator do
   it "signs with the operator without being asked" do
     # No explicit #sign call: before_execute signs with the client's operator,
     # which is what makes the common case a one-liner.
-    receipt = Hiero::Account::TransferTransaction.new
+    receipt = Hiero::TransferTransaction.new
                                                  .add_hbar_transfer(payer, Hiero::Hbar.new(-1))
                                                  .add_hbar_transfer(Solo::NODE_ACCOUNT, Hiero::Hbar.new(1))
                                                  .execute(client)
@@ -63,7 +63,7 @@ RSpec.describe "transferring hbar on a live network", :integration, :operator do
 
   it "survives a round trip through bytes before being sent" do
     # The multi-party workflow: freeze, serialise, ship elsewhere, sign, submit.
-    tx = Hiero::Account::TransferTransaction.new
+    tx = Hiero::TransferTransaction.new
                                             .add_hbar_transfer(payer, Hiero::Hbar.new(-1))
                                             .add_hbar_transfer(Solo::NODE_ACCOUNT, Hiero::Hbar.new(1))
                                             .freeze_with(client)
@@ -81,7 +81,7 @@ RSpec.describe "transferring hbar on a live network", :integration, :operator do
     # it fails at consensus instead. That is precisely the distinction between
     # PrecheckStatusError and ReceiptStatusError, and it costs the payer a fee.
     let(:transaction) do
-      Hiero::Account::TransferTransaction.new
+      Hiero::TransferTransaction.new
                                          .add_hbar_transfer(Solo::NODE_ACCOUNT, Hiero::Hbar.new(-100_000_000))
                                          .add_hbar_transfer(payer, Hiero::Hbar.new(100_000_000))
     end
@@ -110,7 +110,7 @@ RSpec.describe "transferring hbar on a live network", :integration, :operator do
   it "keeps polling until a receipt exists" do
     # The receipt is not available the instant a node accepts the transaction, so
     # this only passes because the query treats an absent receipt as "ask again".
-    response = Hiero::Account::TransferTransaction.new
+    response = Hiero::TransferTransaction.new
                                                   .add_hbar_transfer(payer, Hiero::Hbar.new(-1))
                                                   .add_hbar_transfer(Solo::NODE_ACCOUNT, Hiero::Hbar.new(1))
                                                   .execute(client)

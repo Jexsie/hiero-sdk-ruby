@@ -33,6 +33,19 @@ module Hiero
   end
 
   @loader = Zeitwerk::Loader.for_gem
+
+  # Directories group files by domain without creating a namespace, so
+  # account/account_id.rb still defines Hiero::AccountId rather than nesting it
+  # under an Account namespace.
+  #
+  # The flat names are what every other Hiero SDK uses, and what the HIPs and the
+  # documentation refer to. Nesting them would buy tidier file paths at the cost
+  # of every code sample from another SDK no longer transliterating.
+  #
+  # crypto/ and network/ are deliberately excluded: those are real namespaces for
+  # internal machinery rather than the public request API, and Hiero::Crypto::Keccak
+  # reads correctly where a nested account id would not.
+  @loader.collapse("#{__dir__}/hiero/{account,contract,file,key,query,schedule,token,topic,transaction,value}")
   # Both define several constants each, which is the one thing Zeitwerk's
   # file-per-constant rule cannot express, so they are required outright above.
   @loader.ignore("#{__dir__}/hiero/version.rb")

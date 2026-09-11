@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe Hiero::Account::TransferTransaction do
+RSpec.describe Hiero::TransferTransaction do
   it "balances when debits and credits match" do
     tx = described_class.new
          .add_hbar_transfer("0.0.1001", Hiero::Hbar.new(-1))
