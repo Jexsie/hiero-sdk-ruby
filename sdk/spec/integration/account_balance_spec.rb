@@ -96,6 +96,8 @@ RSpec.describe "AccountInfoQuery against a live network", :integration, :operato
   end
 
   it "charges the payer for the answer" do
+    skip "the treasury pays no fees, so there is nothing to observe" if Solo.fee_exempt_payer?
+
     before = Hiero::AccountBalanceQuery.new(account_id: client.operator_account_id).execute(client).hbars
     Hiero::AccountInfoQuery.new(account_id: Solo::TREASURY).execute(client)
     after = Hiero::AccountBalanceQuery.new(account_id: client.operator_account_id).execute(client).hbars

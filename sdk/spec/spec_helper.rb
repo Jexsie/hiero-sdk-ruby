@@ -97,6 +97,17 @@ module Solo
     end
   end
 
+  # The treasury pays no fees: a transfer from it moves exactly the amount sent,
+  # and no fee collection account grows. Verified against a live node rather than
+  # assumed. Specs that assert a payer was charged have to sit this one out, and
+  # say so rather than failing.
+  #
+  # CI uses the ordinary funded account hiero-solo-action generates, so those
+  # assertions do run there.
+  def self.fee_exempt_payer?
+    operator&.account_id == Hiero::AccountId.from_string(TREASURY)
+  end
+
   # A short budget by default. The SDK's own two-minute ceiling is right for
   # production, where a slow answer beats no answer; in a spec it only means a
   # failure takes two minutes to arrive.

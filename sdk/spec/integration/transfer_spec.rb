@@ -35,7 +35,9 @@ RSpec.describe "transferring hbar on a live network", :integration, :operator do
 
   it "charges the payer a fee on top of the amount sent" do
     # The payer loses the transfer plus the network's fee, so the two sides are
-    # never symmetrical.
+    # never symmetrical -- unless the payer is the treasury, which is exempt.
+    skip "the treasury pays no fees, so there is nothing to observe" if Solo.fee_exempt_payer?
+
     before = balance_of(payer)
 
     Hiero::TransferTransaction.new
