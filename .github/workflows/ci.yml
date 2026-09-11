@@ -41,6 +41,49 @@ jobs:
       - run: gem install zeitwerk rspec --no-document
       - run: rspec --require spec_helper -Isdk/spec -Isdk/lib --pattern 'sdk/spec/**/*_spec.rb'
 
+  # Talks to a real consensus node. hiero-solo-action stands one up in the runner
+  # and hands back a funded account to pay with.
+  #
+  # Pinned to a released tag: the action deploys a whole network, so an unpinned
+  # reference would let an upstream change break this repository's CI with no
+  # commit here.
+  integration:
+    name: integration (live network)
+    runs-on: ubuntu-latest
+    # Deploying a network takes minutes and can wedge. Without a cap a stuck
+    # deployment holds a runner for the six-hour default.
+    timeout-minutes: 30
+    # Nothing here writes to the repository or needs a token beyond checkout.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+
+      - name: Start a Hiero network
+        id: solo
+        uses: hiero-ledger/hiero-solo-action@v0.24.0
+        with:
+          installMirrorNode: true
+
+      - name: Run the integration specs
+        run: bundle exec rake spec:integration
+        env:
+          # The action's defaults; named explicitly so a change upstream shows up
+          # here as a failing job rather than as specs that quietly skip.
+          HIERO_NODE_ADDRESS: localhost:35211
+          HIERO_NODE_ACCOUNT: "0.0.3"
+          HIERO_MIRROR_REST: http://localhost:38081
+          HIERO_OPERATOR_ID: ${{ steps.solo.outputs.accountId }}
+          HIERO_OPERATOR_KEY: ${{ steps.solo.outputs.privateKey }}
+          # Turns "no network" from a skip into a failure. Without this a solo
+          # deployment that failed to come up would leave every integration spec
+          # skipped and the job green.
+          HIERO_REQUIRE_NETWORK: "1"
+
   protos:
     name: generated output is current
     runs-on: ubuntu-latest
