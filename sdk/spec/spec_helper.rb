@@ -20,8 +20,15 @@ RSpec.configure do |config|
   # Skipped rather than failed when nothing is listening, so a plain `rspec` is
   # always green on a laptop with no network running.
   config.filter_run_excluding(:integration) unless config.filter.rules[:integration]
+
   config.before(:each, :integration) do
-    skip "no consensus node at #{Solo::ADDRESS}" unless Solo.reachable?
+    Solo.require_or_skip!(self, Solo.reachable?, "no consensus node at #{Solo::ADDRESS}")
+  end
+
+  # Specs that need a funded account to pay with.
+  config.before(:each, :operator) do
+    Solo.require_or_skip!(self, !Solo.operator.nil?,
+                          "no operator configured; set HIERO_OPERATOR_ID and HIERO_OPERATOR_KEY")
   end
 end
 
@@ -35,7 +42,32 @@ module Solo
   # The treasury, which exists on every network and always holds a balance.
   TREASURY = "0.0.2"
 
+  # In CI a missing network is a failure, not a skip. A suite that quietly skips
+  # everything reports green, which is worse than useless -- it is the shape of
+  # bug where integration coverage silently stops running for months.
+  REQUIRED = ENV["HIERO_REQUIRE_NETWORK"] == "1"
+
   def self.network = { ADDRESS => NODE_ACCOUNT }
+
+  # @return [Hiero::Operator, nil] a funded account to pay with, if configured
+  def self.operator
+    return @operator if defined?(@operator)
+
+    account_id = ENV.fetch("HIERO_OPERATOR_ID", nil)
+    key = ENV.fetch("HIERO_OPERATOR_KEY", nil)
+
+    @operator =
+      if account_id && key
+        Hiero::Operator.new(account_id: account_id, private_key: Hiero::PrivateKey.from_string(key))
+      end
+  end
+
+  def self.require_or_skip!(example, satisfied, message)
+    return if satisfied
+    raise "#{message} (HIERO_REQUIRE_NETWORK is set, so this is a failure rather than a skip)" if REQUIRED
+
+    example.skip(message)
+  end
 
   def self.reachable?
     return @reachable unless @reachable.nil?
@@ -52,7 +84,7 @@ module Solo
   end
 
   def self.client(**options)
-    Hiero::Client.for_network(network, local: true, **options)
+    Hiero::Client.for_network(network, local: true, operator: operator, **options)
   end
 end
 
