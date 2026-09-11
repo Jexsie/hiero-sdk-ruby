@@ -14,7 +14,13 @@ RSpec.describe "transferring hbar on a live network", :integration, :operator do
   end
 
   it "moves hbar and reports SUCCESS" do
-    recipient = Solo::NODE_ACCOUNT
+    # A fresh account, not the node account. The node earns fees from everything
+    # else running, so its balance moves by more than this transfer sends and the
+    # delta cannot be asserted exactly -- which showed up as an intermittent
+    # failure of exactly one query fee.
+    recipient = Hiero::AccountCreateTransaction
+                .new(key: Hiero::PrivateKey.generate_ed25519.public_key)
+                .execute(client).receipt(client).account_id
     before = balance_of(recipient)
 
     response = Hiero::TransferTransaction.new
@@ -35,9 +41,7 @@ RSpec.describe "transferring hbar on a live network", :integration, :operator do
 
   it "charges the payer a fee on top of the amount sent" do
     # The payer loses the transfer plus the network's fee, so the two sides are
-    # never symmetrical -- unless the payer is the treasury, which is exempt.
-    skip "the treasury pays no fees, so there is nothing to observe" if Solo.fee_exempt_payer?
-
+    # never symmetrical.
     before = balance_of(payer)
 
     Hiero::TransferTransaction.new
@@ -118,5 +122,62 @@ RSpec.describe "transferring hbar on a live network", :integration, :operator do
                                                   .execute(client)
 
     expect(response.receipt(client)).to be_success
+  end
+end
+
+RSpec.describe "creating an account on a live network", :integration, :operator do
+  let(:client) { Solo.client }
+
+  after { client.close }
+
+  it "creates a funded account and reports its number on the receipt" do
+    # The account's number is not known until consensus, which is why it arrives
+    # on the receipt rather than from the transaction object.
+    key = Hiero::PrivateKey.generate_ed25519
+
+    receipt = Hiero::AccountCreateTransaction
+              .new(key: key.public_key, initial_balance: Hiero::Hbar.new(1))
+              .execute(client)
+              .receipt(client)
+
+    expect(receipt).to be_success
+    expect(receipt.account_id).to be_a(Hiero::AccountId)
+
+    info = Hiero::AccountInfoQuery.new(account_id: receipt.account_id).execute(client)
+    expect(info.balance).to eq(Hiero::Hbar.new(1))
+    expect(info.key).to eq(key.public_key)
+  end
+
+  it "creates an account controlled by a key list" do
+    a = Hiero::PrivateKey.generate_ed25519
+    b = Hiero::PrivateKey.generate_ecdsa
+    list = Hiero::KeyList.with_threshold(1, a.public_key, b.public_key)
+
+    receipt = Hiero::AccountCreateTransaction.new(key: list).execute(client).receipt(client)
+    info = Hiero::AccountInfoQuery.new(account_id: receipt.account_id).execute(client)
+
+    expect(info.key).to eq(list)
+  end
+
+  it "creates an account the new key can then spend from" do
+    # Proves the created account is genuinely controlled by the key given, not
+    # merely recorded as such.
+    key = Hiero::PrivateKey.generate_ed25519
+    receipt = Hiero::AccountCreateTransaction
+              .new(key: key.public_key, initial_balance: Hiero::Hbar.new(2))
+              .execute(client).receipt(client)
+
+    owned = Hiero::Client.for_network(Solo.network, local: true, request_timeout: 15.0)
+    owned.set_operator(receipt.account_id, key)
+
+    spend = Hiero::TransferTransaction.new
+                                      .add_hbar_transfer(receipt.account_id, Hiero::Hbar.new(-1))
+                                      .add_hbar_transfer(Solo::TREASURY, Hiero::Hbar.new(1))
+                                      .execute(owned)
+                                      .receipt(owned)
+
+    expect(spend).to be_success
+  ensure
+    owned&.close
   end
 end

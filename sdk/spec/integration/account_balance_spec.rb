@@ -95,20 +95,54 @@ RSpec.describe "AccountInfoQuery against a live network", :integration, :operato
     expect(info.key).to eq(client.operator.public_key)
   end
 
-  it "charges the payer for the answer" do
-    skip "the treasury pays no fees, so there is nothing to observe" if Solo.fee_exempt_payer?
+  describe "the payment is real" do
+    # Not asserted by watching the payer's balance. A single-node network does not
+    # collect the query fee -- the node would be paying itself -- so the balance
+    # does not move even though the payment is required and checked. What proves
+    # the payment works is that the node refuses a bad one.
+    it "refuses a query that pays nothing" do
+      query = Hiero::AccountInfoQuery.new(account_id: Solo::TREASURY)
+      query.query_payment = Hiero::Hbar::ZERO
 
-    before = Hiero::AccountBalanceQuery.new(account_id: client.operator_account_id).execute(client).hbars
-    Hiero::AccountInfoQuery.new(account_id: Solo::TREASURY).execute(client)
-    after = Hiero::AccountBalanceQuery.new(account_id: client.operator_account_id).execute(client).hbars
+      expect { query.execute(client) }.to raise_error(Hiero::PrecheckStatusError) do |error|
+        expect(error.status).to eq(Hiero::Status::INSUFFICIENT_TX_FEE)
+      end
+    end
 
-    expect(after).to be < before
+    it "refuses a payment signed by the wrong key" do
+      impostor = Hiero::PrivateKey.generate_ed25519
+      wrong = Hiero::Client.for_network(Solo.network, local: true, request_timeout: 15.0)
+      wrong.set_operator_with(client.operator_account_id, impostor.public_key) { |b| impostor.sign(b) }
+
+      query = Hiero::AccountInfoQuery.new(account_id: Solo::TREASURY)
+      query.query_payment = Hiero::Hbar.from_tinybars(100_000)
+
+      expect { query.execute(wrong) }.to raise_error(Hiero::PrecheckStatusError) do |error|
+        expect(error.status).to eq(Hiero::Status::INVALID_SIGNATURE)
+      end
+    ensure
+      wrong&.close
+    end
+
+    it "accepts a payment at the quoted price" do
+      query = Hiero::AccountInfoQuery.new(account_id: Solo::TREASURY)
+      query.query_payment = Hiero::AccountInfoQuery.new(account_id: Solo::TREASURY).cost(client)
+
+      expect(query.execute(client).account_id).to eq(Hiero::AccountId.from_string(Solo::TREASURY))
+    end
   end
 
   it "accepts a price set in advance, skipping the enquiry" do
+    # Modest but comfortably above the real price. The node checks the payer can
+    # afford the payment even though a single-node network does not collect it,
+    # so an extravagant figure here fails on balance rather than on anything the
+    # spec is about.
     query = Hiero::AccountInfoQuery.new(account_id: Solo::TREASURY)
-    query.query_payment = Hiero::Hbar.new(1)
+    query.query_payment = Hiero::Hbar.from_tinybars(1_000_000)
 
+    # The whole point of setting a price is that the cost enquiry is skipped, so
+    # that is asserted rather than assumed.
+    expect(query).not_to receive(:cost)
     expect(query.execute(client).account_id).to eq(Hiero::AccountId.from_string(Solo::TREASURY))
   end
 

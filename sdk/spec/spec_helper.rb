@@ -34,6 +34,7 @@ RSpec.configure do |config|
   config.before(:each, :operator) do
     Solo.require_or_skip!(self, !Solo.operator.nil?,
                           "no operator configured; set HIERO_OPERATOR_ID and HIERO_OPERATOR_KEY")
+    Solo.require_or_skip!(self, !Solo.test_operator.nil?, Solo.funding_error.to_s)
   end
 end
 
@@ -97,21 +98,61 @@ module Solo
     end
   end
 
-  # The treasury pays no fees: a transfer from it moves exactly the amount sent,
-  # and no fee collection account grows. Verified against a live node rather than
-  # assumed. Specs that assert a payer was charged have to sit this one out, and
-  # say so rather than failing.
+  # A fresh account, created and funded once per run, that the specs pay with.
   #
-  # CI uses the ordinary funded account hiero-solo-action generates, so those
-  # assertions do run there.
-  def self.fee_exempt_payer?
-    operator&.account_id == Hiero::AccountId.from_string(TREASURY)
+  # Two reasons not to spend the configured operator directly. Transactions cost
+  # money, so a suite that pays from a fixed account drains it and starts failing
+  # after enough runs -- which it did, with different examples failing each time
+  # depending on what was left. And the configured operator may be the treasury,
+  # which pays no fees at all, so any assertion about a payer being charged is
+  # unobservable through it.
+  #
+  # An ordinary account created per run is repeatable and behaves like a real one.
+  # Enough for a run several times over. Kept modest so a funder with a small
+  # balance can still stand one up.
+  TEST_ACCOUNT_BALANCE = 25
+
+  # Why the test account could not be created, if it could not be.
+  def self.funding_error = (test_operator; @funding_error)
+
+  def self.test_operator
+    return @test_operator if defined?(@test_operator)
+
+    @funding_error = nil
+    @test_operator = nil
+    return nil if operator.nil?
+
+    key = Hiero::PrivateKey.generate_ed25519
+    funder = Hiero::Client.for_network(network, local: true, operator: operator, request_timeout: 30.0)
+    begin
+      receipt = Hiero::AccountCreateTransaction
+                .new(key: key.public_key, initial_balance: Hiero::Hbar.new(TEST_ACCOUNT_BALANCE))
+                .set_account_memo("hiero-sdk-ruby integration run")
+                .execute(funder)
+                .receipt(funder)
+      @test_operator = Hiero::Operator.new(account_id: receipt.account_id, private_key: key)
+    rescue StandardError => e
+      # Reported once, with the reason. Left to fail lazily this surfaces as every
+      # example failing for a different-looking reason.
+      @funding_error = "#{operator.account_id} could not fund a #{TEST_ACCOUNT_BALANCE} hbar " \
+                       "test account: #{e.class} #{e.message.lines.first.to_s.strip}"
+      nil
+    ensure
+      funder.close
+    end
   end
 
   # A short budget by default. The SDK's own two-minute ceiling is right for
   # production, where a slow answer beats no answer; in a spec it only means a
   # failure takes two minutes to arrive.
   def self.client(**options)
+    Hiero::Client.for_network(network, local: true, operator: test_operator,
+                              request_timeout: 15.0, max_attempts: 10, **options)
+  end
+
+  # A client paying with the operator the environment configured, for the specs
+  # that are about that handoff rather than about spending.
+  def self.configured_client(**options)
     Hiero::Client.for_network(network, local: true, operator: operator,
                               request_timeout: 15.0, max_attempts: 10, **options)
   end

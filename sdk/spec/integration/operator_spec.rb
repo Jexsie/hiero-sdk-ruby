@@ -8,7 +8,7 @@
 # It does not yet prove the key can sign anything the network accepts; nothing
 # here signs. That arrives with the transaction layer.
 RSpec.describe "the configured operator", :integration, :operator do
-  let(:client) { Solo.client }
+  let(:client) { Solo.configured_client }
 
   after { client.close }
 
