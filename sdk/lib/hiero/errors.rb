@@ -97,6 +97,22 @@ module Hiero
     end
   end
 
+  # A query would cost more than the caller agreed to pay.
+  #
+  # Raised before anything is spent -- the price is discovered first, and the
+  # payment is only signed once it is under the ceiling.
+  class MaxQueryPaymentExceededError < Error
+    attr_reader :cost, :maximum, :query
+
+    def initialize(cost:, maximum:, query: nil)
+      @cost = cost
+      @maximum = maximum
+      @query = query
+      super("#{query || 'this query'} costs #{cost}, which is more than the #{maximum} limit. " \
+            "Raise max_query_payment, or set query_payment to pay a fixed amount.")
+    end
+  end
+
   # A Client was used after being closed.
   class ClientClosedError < Error; end
 

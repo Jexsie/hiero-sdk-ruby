@@ -37,17 +37,17 @@ module Hiero
     # Free: the network does not charge for a balance lookup.
     def payment_required? = false
 
-    def before_execute(client)
+    def validate_query!
       raise Error, "an AccountBalanceQuery needs an account_id or a contract_id" if @account_id.nil? && @contract_id.nil?
-
-      return unless client.auto_validate_checksums && client.ledger_id
-
-      @account_id&.validate_checksum!(client.ledger_id)
-      @contract_id&.validate_checksum!(client.ledger_id)
     end
 
-    def make_request
-      body = ::Proto::CryptoGetAccountBalanceQuery.new(header: query_header)
+    def validate_checksums(ledger_id)
+      @account_id&.validate_checksum!(ledger_id)
+      @contract_id&.validate_checksum!(ledger_id)
+    end
+
+    def build_query(header)
+      body = ::Proto::CryptoGetAccountBalanceQuery.new(header: header)
       if @account_id
         body.accountID = ::Proto::AccountID.new(
           shardNum: @account_id.shard, realmNum: @account_id.realm, accountNum: @account_id.num

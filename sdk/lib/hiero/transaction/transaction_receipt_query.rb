@@ -35,14 +35,14 @@ module Hiero
 
     def payment_required? = false
 
-    def before_execute(_client)
+    def validate_query!
       raise Error, "a TransactionReceiptQuery needs a transaction_id" if @transaction_id.nil?
     end
 
-    def make_request
+    def build_query(header)
       ::Proto::Query.new(
         transactionGetReceipt: ::Proto::TransactionGetReceiptQuery.new(
-          header: query_header, transactionID: @transaction_id.to_protobuf
+          header: header, transactionID: @transaction_id.to_protobuf
         )
       )
     end
