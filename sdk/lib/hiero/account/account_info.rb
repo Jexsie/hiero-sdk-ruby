@@ -19,7 +19,10 @@ module Hiero
                                   num: info.accountID.accountNum),
         # The long-zero EVM form of the same account, which contracts address it by.
         contract_account_id: info.contractAccountID.empty? ? nil : info.contractAccountID,
-        key: info.key && PublicKey.from_protobuf_key(info.key),
+        # Key, not PublicKey: an account may be controlled by a key list or a
+        # threshold key, and the PublicKey-only reader returns nil for those
+        # rather than failing.
+        key: Key.from_protobuf_key(info.key),
         balance: Hbar.from_tinybars(info.balance),
         memo: info.memo,
         expiration_time: info.expirationTime && Timestamp.new(seconds: info.expirationTime.seconds,
