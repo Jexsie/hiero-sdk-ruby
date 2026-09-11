@@ -31,10 +31,37 @@ need that version to use the gem.
 
 ```sh
 bundle install
-bundle exec rake spec      # every suite
+bundle exec rake spec      # every suite that needs no network
 bundle exec rake spec:sdk  # just one
 bundle exec rake build     # build the gem into pkg/
 ```
+
+### Integration tests
+
+Specs tagged `:integration` talk to a real consensus node. They are excluded from
+the default run, and skip rather than fail when nothing is listening, so
+`rake spec` stays green on a machine with no network.
+
+```sh
+bundle exec rake spec:integration
+```
+
+Defaults match [hiero-solo-action](https://github.com/hiero-ledger/hiero-solo-action)
+— consensus gRPC on `localhost:35211`, mirror REST on `localhost:38081`. Point them
+elsewhere, and supply an account to pay with, through the environment:
+
+| Variable | Default | |
+| --- | --- | --- |
+| `HIERO_NODE_ADDRESS` | `localhost:35211` | consensus node gRPC |
+| `HIERO_NODE_ACCOUNT` | `0.0.3` | that node's account |
+| `HIERO_MIRROR_REST` | `http://localhost:38081` | mirror node REST |
+| `HIERO_OPERATOR_ID` | — | a funded account; specs needing one skip without it |
+| `HIERO_OPERATOR_KEY` | — | its private key, DER-encoded hex |
+| `HIERO_REQUIRE_NETWORK` | — | `1` turns a missing network from a skip into a failure |
+
+CI sets all of these from the solo action's outputs, including
+`HIERO_REQUIRE_NETWORK` — a suite that quietly skips everything reports green,
+which is worse than useless.
 
 ### Cryptography
 
