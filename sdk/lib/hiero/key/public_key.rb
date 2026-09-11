@@ -56,6 +56,18 @@ module Hiero
         new(raw, :ecdsa)
       end
 
+      # Reads a protobuf Key. Only the two single-key cases are handled here; a
+      # key list or threshold key is a KeyList, not a PublicKey.
+      def from_protobuf_key(key)
+        # Note the spelling: the protobuf field is ECDSA_secp256k1, not
+        # ECDSASecp256k1. Guessing it wrong makes this return nil for every ECDSA
+        # account rather than failing.
+        case key.key
+        when :ed25519 then new(key.ed25519, :ed25519)
+        when :ECDSA_secp256k1 then new(key.ECDSA_secp256k1, :ecdsa)
+        end
+      end
+
       def from_der(bytes)
         bytes = bytes.b
         if (raw = strip_prefix(bytes, ED25519_DER_PREFIX, ED25519_LENGTH))
