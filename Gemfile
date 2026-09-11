@@ -13,8 +13,17 @@ group :development do
 
   gem "rake",  "~> 13.0"
   gem "rspec", "~> 3.13"
+end
 
-  # Optional at runtime: makes keccak256 roughly 400x faster. Installed here so
-  # CI exercises the native path as well as the pure-Ruby default.
+# Optional at runtime: makes keccak256 roughly 400x faster, and the SDK works
+# without it. Its own group so CI can exclude just this one gem and prove the
+# pure-Ruby fallback still passes the whole suite:
+#
+#   BUNDLE_WITHOUT=native_crypto bundle install
+#
+# Excluding it by installing a smaller set of gems by hand does not work -- the
+# suite also needs grpc and hiero-proto, and leaving those out tests the wrong
+# absence.
+group :native_crypto do
   gem "digest-keccak", "~> 0.0"
 end
