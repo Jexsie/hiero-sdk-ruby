@@ -54,6 +54,19 @@ module Hiero
     #   encodes as a ThresholdKey rather than a plain KeyList
     def threshold? = !@threshold.nil?
 
+    # A list with a threshold is a different protobuf message from one without,
+    # which is why the two are one class here and two on the wire.
+    def to_protobuf_key
+      Hiero.protobuf!
+      members = ::Proto::KeyList.new(keys: @keys.map(&:to_protobuf_key))
+
+      if threshold?
+        ::Proto::Key.new(thresholdKey: ::Proto::ThresholdKey.new(threshold: @threshold, keys: members))
+      else
+        ::Proto::Key.new(keyList: members)
+      end
+    end
+
     def ==(other)
       other.is_a?(KeyList) && other.keys == @keys && other.threshold == @threshold
     end

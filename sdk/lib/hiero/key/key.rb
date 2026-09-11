@@ -12,5 +12,20 @@ module Hiero
     def to_protobuf_key
       raise NotImplementedError, "#{self.class} does not implement to_protobuf_key"
     end
+
+    # Reads any protobuf Key back into whichever type it represents.
+    #
+    # @return [PublicKey, KeyList, nil]
+    def self.from_protobuf_key(key)
+      return nil if key.nil?
+
+      case key.key
+      when :ed25519, :ECDSA_secp256k1 then PublicKey.from_protobuf_key(key)
+      when :keyList then KeyList.new(key.keyList.keys.map { |member| from_protobuf_key(member) })
+      when :thresholdKey
+        KeyList.new(key.thresholdKey.keys.keys.map { |member| from_protobuf_key(member) },
+                    threshold: key.thresholdKey.threshold)
+      end
+    end
   end
 end

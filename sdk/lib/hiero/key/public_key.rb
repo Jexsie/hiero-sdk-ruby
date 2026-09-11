@@ -57,7 +57,8 @@ module Hiero
       end
 
       # Reads a protobuf Key. Only the two single-key cases are handled here; a
-      # key list or threshold key is a KeyList, not a PublicKey.
+      # key list or threshold key is a KeyList, not a PublicKey. See
+      # {Key.from_protobuf_key} for the general case.
       def from_protobuf_key(key)
         # Note the spelling: the protobuf field is ECDSA_secp256k1, not
         # ECDSASecp256k1. Guessing it wrong makes this return nil for every ECDSA
@@ -118,6 +119,12 @@ module Hiero
     end
 
     def to_evm_address_string = Encoding.encode_hex(to_evm_address)
+
+    # @return [Proto::Key] this key as the network's Key structure
+    def to_protobuf_key
+      Hiero.protobuf!
+      ed25519? ? ::Proto::Key.new(ed25519: @bytes) : ::Proto::Key.new(ECDSA_secp256k1: @bytes)
+    end
 
     def to_bytes_raw = @bytes
     def to_bytes_der = der_prefix + @bytes
