@@ -39,9 +39,15 @@ RSpec.describe "AccountBalanceQuery against a live network", :integration do
   end
 
   it "needs no operator, being a free query" do
-    expect(client.operator).to be_nil
-    expect { Hiero::Account::AccountBalanceQuery.new(account_id: Solo::TREASURY).execute(client) }
+    # Built without one deliberately, rather than relying on the shared client
+    # happening not to have an operator configured.
+    anonymous = Hiero::Client.for_network(Solo.network, local: true)
+
+    expect(anonymous.operator).to be_nil
+    expect { Hiero::Account::AccountBalanceQuery.new(account_id: Solo::TREASURY).execute(anonymous) }
       .not_to raise_error
+  ensure
+    anonymous&.close
   end
 
   it "gives up on an unreachable node instead of hanging" do
