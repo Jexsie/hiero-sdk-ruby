@@ -44,6 +44,18 @@ RSpec.describe Hiero::TransactionReceiptQuery do
       expect(state).to eq([Hiero::Status::INSUFFICIENT_ACCOUNT_BALANCE, :finished])
     end
 
+    it "keeps asking when the node returns no receipt at all" do
+      # Not the same as a receipt saying RECEIPT_NOT_FOUND: the field is simply
+      # absent, which is the most common answer this query gets while polling.
+      bare = Proto::Response.new(
+        transactionGetReceipt: Proto::TransactionGetReceiptResponse.new(
+          header: Proto::ResponseHeader.new(nodeTransactionPrecheckCode: :OK)
+        )
+      )
+
+      expect(query.execution_state(nil, bare)).to eq([Hiero::Status::RECEIPT_NOT_FOUND, :retry])
+    end
+
     it "still retries a busy node" do
       expect(query.execution_state(nil, response(precheck: :BUSY)).last).to eq(:retry)
     end

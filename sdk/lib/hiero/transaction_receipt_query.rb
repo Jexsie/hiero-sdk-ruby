@@ -62,7 +62,14 @@ module Hiero
         return [precheck, %i[BUSY PLATFORM_NOT_ACTIVE].include?(precheck.name) ? :retry : :error]
       end
 
-      receipt_status = Status[response.transactionGetReceipt.receipt.status]
+      # A node that has not seen the transaction yet answers with no receipt at
+      # all rather than one saying RECEIPT_NOT_FOUND, so the absent case has to be
+      # treated as "ask again" too. Reading .status straight off it crashes on the
+      # single most common response this query gets.
+      receipt = response.transactionGetReceipt.receipt
+      return [Status::RECEIPT_NOT_FOUND, :retry] if receipt.nil?
+
+      receipt_status = Status[receipt.status]
       [receipt_status, PENDING.include?(receipt_status) ? :retry : :finished]
     end
 
