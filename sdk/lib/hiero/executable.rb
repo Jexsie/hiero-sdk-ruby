@@ -33,6 +33,16 @@ module Hiero
     attr_reader :node_account_ids
 
     def initialize
+      # Constructing a request is the moment a caller has committed to talking to
+      # a network, and it is the one choke point every Transaction and Query goes
+      # through -- so this is where the protobuf classes get loaded.
+      #
+      # Doing it per-method instead was tried and does not work: the classes are
+      # reached from #make_request, #signatures, #to_bytes and several others, and
+      # missing one produces `uninitialized constant Proto` at runtime, in
+      # whichever path happens not to be covered.
+      Hiero.protobuf!
+
       @node_account_ids = CircularList.new
       @max_attempts = nil
       @min_backoff = nil
@@ -71,11 +81,6 @@ module Hiero
     # @param timeout [Float, nil] overrides the client's request_timeout
     # @return [Object] whatever {#map_response} returns
     def execute(client, timeout: nil)
-      # Every request needs the protobuf classes, and #make_request reaches for
-      # them before the channel is ever touched, so this is the one place that
-      # reliably runs first. See {Hiero.protobuf!} for why it is not loaded at
-      # require time.
-      Hiero.protobuf!
       client.ensure_open!
       inherit_defaults_from(client)
       before_execute(client)

@@ -6,6 +6,11 @@ require "yaml"
 
 require "hiero"
 
+# Specs build protobuf messages directly to stand in for node responses, so the
+# generated classes have to be present. Application code gets them by
+# constructing a request; a spec asserting on a response has not constructed one.
+Hiero.protobuf!
+
 RSpec.configure do |config|
   config.expect_with(:rspec) { |c| c.syntax = :expect }
   config.disable_monkey_patching!
