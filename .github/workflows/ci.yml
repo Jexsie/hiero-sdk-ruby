@@ -8,6 +8,14 @@ on:
 permissions:
   contents: read
 
+# Actions are pinned to the commit each release tag points at, with the version
+# in a comment. A tag is a movable reference: whoever controls the action can
+# repoint v7 at anything, and these run with access to the checkout. A SHA cannot
+# be repointed. The comment is what keeps them upgradable by hand or by
+# Dependabot, which rewrites both together.
+env:
+  RUBY_DEFAULT: "3.4"
+
 jobs:
   spec:
     name: spec (ruby ${{ matrix.ruby }})
@@ -15,64 +23,70 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Support runs from 3.2 (the floor our dependencies impose, and where
-        # Data.define arrives) up to the latest release. Development happens on
-        # the newest; CI is what proves the floor has not quietly rotted.
+        # 3.2 is the supported floor -- the version google-protobuf and grpc
+        # require, and where Data.define arrives. The top of the range is what
+        # development happens on.
         ruby: ["3.2", "3.3", "3.4", "4.0"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
       - run: bundle exec rake spec
 
-  # The SDK's cryptography is written to need no native gem. This job removes the
-  # optional one so the pure-Ruby keccak path is what actually gets tested, rather
-  # than being shadowed by a faster implementation that happens to be installed.
+  # The SDK's cryptography needs no native gem. This runs the whole suite with
+  # digest-keccak excluded, so the pure-Ruby keccak path is what actually gets
+  # tested rather than being shadowed by a faster implementation that happens to
+  # be installed.
+  #
+  # Only that one gem is excluded. grpc and hiero-proto stay, because the suite
+  # needs them and leaving them out would be testing the wrong absence.
   no-native-crypto:
     name: crypto works with no optional native gem
     runs-on: ubuntu-latest
+    env:
+      BUNDLE_WITHOUT: native_crypto
     steps:
-      - uses: actions/checkout@v4
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
           ruby-version: "3.2"
-      - run: gem install zeitwerk rspec --no-document
-      - run: rspec --require spec_helper -Isdk/spec -Isdk/lib --pattern 'sdk/spec/**/*_spec.rb'
+          bundler-cache: true
+      - name: Confirm the native gem really is absent
+        run: |
+          bundle exec ruby -Isdk/lib -e '
+            require "hiero"
+            abort "digest-keccak is installed; this job proves nothing" if Hiero::Crypto::Keccak::NATIVE
+            puts "keccak running on the pure-Ruby path"
+          '
+      - run: bundle exec rake spec
 
   # Talks to a real consensus node. hiero-solo-action stands one up in the runner
   # and hands back a funded account to pay with.
-  #
-  # Pinned to a released tag: the action deploys a whole network, so an unpinned
-  # reference would let an upstream change break this repository's CI with no
-  # commit here.
   integration:
     name: integration (live network)
     runs-on: ubuntu-latest
     # Deploying a network takes minutes and can wedge. Without a cap a stuck
     # deployment holds a runner for the six-hour default.
     timeout-minutes: 30
-    # Nothing here writes to the repository or needs a token beyond checkout.
-    permissions:
-      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
-          ruby-version: "3.4"
+          ruby-version: ${{ env.RUBY_DEFAULT }}
           bundler-cache: true
 
       - name: Start a Hiero network
         id: solo
-        uses: hiero-ledger/hiero-solo-action@v0.24.0
+        uses: hiero-ledger/hiero-solo-action@6a79c9451fc1b26a98536facc3b988ab122ffbc8 # v0.24.0
         with:
           installMirrorNode: true
 
       - name: Run the integration specs
         run: bundle exec rake spec:integration
         env:
-          # The action's defaults; named explicitly so a change upstream shows up
+          # The action's defaults, named explicitly so a change upstream shows up
           # here as a failing job rather than as specs that quietly skip.
           HIERO_NODE_ADDRESS: localhost:35211
           HIERO_NODE_ACCOUNT: "0.0.3"
@@ -88,10 +102,10 @@ jobs:
     name: generated output is current
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
-          ruby-version: "4.0"
+          ruby-version: ${{ env.RUBY_DEFAULT }}
           bundler-cache: true
       # Regenerates from the vendored .proto sources and fails if the result
       # differs from what is committed. This is why grpc-tools is pinned in the
@@ -99,19 +113,19 @@ jobs:
       - run: bundle exec rake protos:check
 
   package:
-    name: gem builds and installs
+    name: gems build and install
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
-          ruby-version: "4.0"
+          ruby-version: ${{ env.RUBY_DEFAULT }}
           bundler-cache: true
       - run: bundle exec rake build build_sdk
       # Building a gem and installing one are different things: a gem can build
       # cleanly and still be uninstallable. Install them outside the checkout and
       # require them with no load path help, the way a consumer would.
-      - name: install and require the built gems
+      - name: Install and require the built gems
         run: |
           gem install pkg/hiero-proto.gem pkg/hiero-sdk.gem --no-document
           cd "$(mktemp -d)"
