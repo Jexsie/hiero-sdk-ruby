@@ -74,22 +74,35 @@ module Solo
     example.skip(message)
   end
 
+  # Whether a node will actually answer.
+  #
+  # Deliberately a real query rather than a TCP connect. A solo network fronts
+  # its consensus node with HAProxy, which keeps listening after the node behind
+  # it dies -- so the socket opens, every request then times out, and with a
+  # local network's large attempt budget each example burns the entire
+  # request_timeout before failing. A suite that takes twenty minutes to report a
+  # dead network is indistinguishable from one that has hung, which is exactly
+  # what happened before this was changed.
   def self.reachable?
     return @reachable unless @reachable.nil?
 
-    host, port = ADDRESS.split(":")
-    @reachable =
-      begin
-        require "socket"
-        Socket.tcp(host, Integer(port), connect_timeout: 1, &:close)
-        true
-      rescue StandardError
-        false
-      end
+    client = Hiero::Client.for_network(network, local: true, max_attempts: 1, grpc_deadline: 3.0)
+    begin
+      Hiero::AccountBalanceQuery.new(account_id: TREASURY).execute(client, timeout: 5)
+      @reachable = true
+    rescue StandardError
+      @reachable = false
+    ensure
+      client.close
+    end
   end
 
+  # A short budget by default. The SDK's own two-minute ceiling is right for
+  # production, where a slow answer beats no answer; in a spec it only means a
+  # failure takes two minutes to arrive.
   def self.client(**options)
-    Hiero::Client.for_network(network, local: true, operator: operator, **options)
+    Hiero::Client.for_network(network, local: true, operator: operator,
+                              request_timeout: 15.0, max_attempts: 10, **options)
   end
 end
 

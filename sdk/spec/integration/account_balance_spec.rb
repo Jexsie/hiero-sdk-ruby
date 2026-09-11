@@ -72,3 +72,48 @@ RSpec.describe "AccountBalanceQuery against a live network", :integration do
     unreachable&.close
   end
 end
+
+# The paid path, which the free queries never exercise: the node quotes a price,
+# the client signs a transfer for it, and only then does the node answer.
+RSpec.describe "AccountInfoQuery against a live network", :integration, :operator do
+  let(:client) { Solo.client }
+
+  after { client.close }
+
+  it "quotes a price before answering" do
+    cost = Hiero::AccountInfoQuery.new(account_id: Solo::TREASURY).cost(client)
+
+    expect(cost).to be_a(Hiero::Hbar)
+    expect(cost).to be_positive
+  end
+
+  it "pays the quoted price and returns the account" do
+    info = Hiero::AccountInfoQuery.new(account_id: client.operator_account_id).execute(client)
+
+    expect(info.account_id).to eq(client.operator_account_id)
+    expect(info.balance).to be_positive
+    expect(info.key).to eq(client.operator.public_key)
+  end
+
+  it "charges the payer for the answer" do
+    before = Hiero::AccountBalanceQuery.new(account_id: client.operator_account_id).execute(client).hbars
+    Hiero::AccountInfoQuery.new(account_id: Solo::TREASURY).execute(client)
+    after = Hiero::AccountBalanceQuery.new(account_id: client.operator_account_id).execute(client).hbars
+
+    expect(after).to be < before
+  end
+
+  it "accepts a price set in advance, skipping the enquiry" do
+    query = Hiero::AccountInfoQuery.new(account_id: Solo::TREASURY)
+    query.query_payment = Hiero::Hbar.new(1)
+
+    expect(query.execute(client).account_id).to eq(Hiero::AccountId.from_string(Solo::TREASURY))
+  end
+
+  it "refuses to pay more than the ceiling" do
+    query = Hiero::AccountInfoQuery.new(account_id: Solo::TREASURY)
+    query.max_query_payment = Hiero::Hbar.from_tinybars(1)
+
+    expect { query.execute(client) }.to raise_error(Hiero::MaxQueryPaymentExceededError)
+  end
+end
